@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aktienscanner - Analyse, Charts & Kaufempfehlung</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2><i class="fas fa-crosshairs"></i> Aktienscanner</h2>
+        </div>
+        <div class="ticker-search">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="tickerInput" placeholder="Ticker eingeben..." value="MORN" spellcheck="false">
+                <button id="tickerSearchBtn" title="Aktie laden"><i class="fas fa-arrow-right"></i></button>
+            </div>
+            <div class="recent-tickers" id="recentTickers"></div>
+        </div>
+        <ul class="nav-links">
+            <li class="active" data-section="dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</li>
+            <li data-section="chart"><i class="fas fa-chart-area"></i> Live Chart</li>
+            <li data-section="analysis"><i class="fas fa-search-dollar"></i> Analyse</li>
+            <li data-section="valuation"><i class="fas fa-calculator"></i> Bewertung</li>
+            <li data-section="setup"><i class="fas fa-bullseye"></i> Trade Setup</li>
+            <li data-section="news"><i class="fas fa-newspaper"></i> News & Twitter</li>
+            <li data-section="weekly"><i class="fas fa-calendar-week"></i> Wochenempfehlung</li>
+            <li data-section="economic"><i class="fas fa-globe"></i> Wirtschaftslage</li>
+        </ul>
+    </nav>
+
+    <main class="content">
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="section active">
+            <div class="section-header">
+                <h1 id="dashboardTitle">Morningstar Inc (MORN)</h1>
+                <div class="stock-badge" id="stockBadge">
+                    <span class="sector">Finanzdienstleistungen</span>
+                </div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Aktueller Kurs</div>
+                    <div class="kpi-value" id="currentPrice">$172.91</div>
+                    <div class="kpi-change positive" id="priceChange">+7.49% (1J)</div>
+                </div>
+                <div class="kpi-card highlight">
+                    <div class="kpi-label">Fairer Wert</div>
+                    <div class="kpi-value" id="fairValue">$279.20</div>
+                    <div class="kpi-change positive" id="fairValueDiff">38.1% unterbewertet</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Marktkapitalisierung</div>
+                    <div class="kpi-value" id="marketCap">$6.66 Mrd.</div>
+                    <div class="kpi-sub" id="marketCapSub">KGV: 19.49 | Beta: 1.11</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Empfehlung</div>
+                    <div class="kpi-value recommendation buy" id="recommendation">KAUFEN</div>
+                    <div class="kpi-sub" id="recReason">Sicherheitsmarge: 38.1%</div>
+                </div>
+            </div>
+
+            <!-- Valuation Reasoning -->
+            <div class="reasoning-box" id="reasoningBox">
+                <div class="reasoning-header">
+                    <h3><i class="fas fa-brain"></i> Warum ist diese Aktie unterbewertet?</h3>
+                    <span class="reasoning-badge positive" id="reasoningBadge">UNTERBEWERTET</span>
+                </div>
+                <div class="reasoning-content" id="reasoningContent"></div>
+            </div>
+
+            <!-- Trade Setup Preview -->
+            <div class="setup-preview" id="setupPreview">
+                <h3><i class="fas fa-bullseye"></i> Aktuelles Trade Setup</h3>
+                <div class="setup-levels" id="setupLevels"></div>
+            </div>
+
+            <div class="two-col">
+                <div class="chart-container">
+                    <h3>EPS Entwicklung</h3>
+                    <canvas id="epsChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Umsatz & Free Cashflow</h3>
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- LIVE CHART -->
+        <section id="chart" class="section">
+            <h1>Live Aktienchart - <span id="chartTicker">MORN</span></h1>
+            <p class="section-desc">Interaktiver Chart powered by TradingView</p>
+            <div class="tradingview-container" id="tradingviewContainer">
+                <!-- TradingView Widget -->
+            </div>
+        </section>
+
+        <!-- ANALYSE-TOOL -->
+        <section id="analysis" class="section">
+            <h1>Unternehmensanalyse - <span id="analysisTicker">MORN</span></h1>
+            <p class="section-desc" id="analysisDesc">DeltaValue Value-Rechner Daten - Morningstar Inc</p>
+
+            <div class="analysis-grid" id="analysisGrid">
+                <!-- Generated by JS -->
+            </div>
+
+            <div class="chart-container">
+                <h3>Historische Kennzahlen im Zeitverlauf</h3>
+                <canvas id="qualityChart"></canvas>
+            </div>
+        </section>
+
+        <!-- BEWERTUNG -->
+        <section id="valuation" class="section">
+            <h1>Fair Value Berechnung - <span id="valuationTicker">MORN</span></h1>
+            <p class="section-desc">DCF-basierte Bewertung nach DeltaValue-Methode</p>
+
+            <div class="valuation-panel">
+                <div class="valuation-inputs">
+                    <h3><i class="fas fa-sliders-h"></i> Bewertungsparameter</h3>
+                    <div class="input-group">
+                        <label>Aktueller EPS (Gewinn je Aktie)</label>
+                        <input type="number" id="inputEPS" value="8.87" step="0.01">
+                    </div>
+                    <div class="input-group">
+                        <label>Geschaetztes EPS-Wachstum p.a.</label>
+                        <input type="number" id="inputGrowth" value="12" step="0.5" min="0" max="50">
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Exit-Multiple (KGV in 10 Jahren)</label>
+                        <input type="number" id="inputPE" value="41" step="1">
+                        <span class="hint" id="peHint">Durchschn. 10J KGV: 41.12 | Konservativ: 24</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Geforderte Rendite (Diskontierungssatz)</label>
+                        <input type="number" id="inputDiscount" value="15" step="0.5" min="1" max="30">
+                        <span class="unit">%</span>
+                    </div>
+                    <button class="calc-btn" onclick="calculateFairValue()"><i class="fas fa-calculator"></i> Berechnen</button>
+                </div>
+
+                <div class="valuation-result">
+                    <h3>Ergebnis</h3>
+                    <div class="result-box">
+                        <div class="result-item">
+                            <span>EPS in 10 Jahren (Schaetzung)</span>
+                            <strong id="futureEPS">$27.55</strong>
+                        </div>
+                        <div class="result-item">
+                            <span>Kurs in 10 Jahren (Schaetzung)</span>
+                            <strong id="futurePrice">$1,129.50</strong>
+                        </div>
+                        <div class="result-divider"></div>
+                        <div class="result-item big">
+                            <span>Fairer Wert je Aktie (heute)</span>
+                            <strong id="calcFairValue" class="positive">$279.20</strong>
+                        </div>
+                        <div class="result-item big">
+                            <span>Aktueller Aktienkurs</span>
+                            <strong id="calcCurrentPrice">$172.91</strong>
+                        </div>
+                        <div class="result-divider"></div>
+                        <div class="result-item highlight-result">
+                            <span>Sicherheitsmarge</span>
+                            <strong id="calcMargin" class="positive">38.1%</strong>
+                        </div>
+                        <div class="verdict" id="calcVerdict">
+                            <i class="fas fa-thumbs-up"></i> Die Aktie ist deutlich unterbewertet. Starke Kaufgelegenheit!
+                        </div>
+                    </div>
+
+                    <!-- Valuation Reasoning Detail -->
+                    <div class="reasoning-detail" id="valuationReasoning"></div>
+
+                    <div class="kgv-history">
+                        <h4>KGV-Historie</h4>
+                        <canvas id="kgvChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TRADE SETUP -->
+        <section id="setup" class="section">
+            <h1>Trade Setup - <span id="setupTicker">MORN</span></h1>
+            <p class="section-desc">Konkrete Handelsempfehlung mit Einstieg, Stop-Loss und Kurszielen</p>
+
+            <div class="setup-full" id="setupFull">
+                <!-- Generated by JS -->
+            </div>
+
+            <div class="chart-container">
+                <h3>Kurs mit Trade-Levels</h3>
+                <canvas id="setupChart"></canvas>
+            </div>
+
+            <div class="setup-rules">
+                <h3><i class="fas fa-shield-alt"></i> Risikomanagement-Regeln</h3>
+                <div class="rules-grid" id="rulesGrid">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- NEWS & TWITTER -->
+        <section id="news" class="section">
+            <h1>News & Social Media - <span id="newsTicker">MORN</span></h1>
+            <p class="section-desc">Aktuelle Nachrichten, Wirtschaftsdaten und wichtige Twitter/X-Posts</p>
+
+            <div class="news-grid">
+                <div class="news-column">
+                    <div class="news-panel">
+                        <h3><i class="fas fa-newspaper"></i> Aktuelle Nachrichten</h3>
+                        <div id="newsContainer"></div>
+                    </div>
+                    <div class="news-panel">
+                        <h3><i class="fas fa-chart-pie"></i> Wirtschaftsdaten</h3>
+                        <div id="econDataContainer"></div>
+                    </div>
+                </div>
+                <div class="news-column">
+                    <div class="news-panel twitter-panel">
+                        <h3><i class="fab fa-x-twitter"></i> Wichtige Posts (X/Twitter)</h3>
+                        <div class="twitter-filter">
+                            <button class="tw-filter active" data-filter="all">Alle</button>
+                            <button class="tw-filter" data-filter="trump">Trump</button>
+                            <button class="tw-filter" data-filter="musk">Elon Musk</button>
+                            <button class="tw-filter" data-filter="fed">Fed/EZB</button>
+                        </div>
+                        <div id="twitterContainer"></div>
+                    </div>
+                    <div class="news-panel alert-panel">
+                        <h3><i class="fas fa-bell"></i> Markt-Alerts</h3>
+                        <div id="alertContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- WOCHENEMPFEHLUNG -->
+        <section id="weekly" class="section">
+            <h1>Wochenempfehlung - KW <span id="currentKW">15</span> / 2026</h1>
+            <p class="section-desc">Woechentliche Analyse der interessantesten Aktien zum Kauf und Verkauf</p>
+
+            <div class="weekly-date" id="weeklyDate">Woche vom 06. April - 12. April 2026</div>
+
+            <div class="two-col">
+                <div class="weekly-panel buy-panel">
+                    <h3><i class="fas fa-arrow-up"></i> Kaufempfehlungen</h3>
+                    <div class="stock-pick" id="buyPicks"></div>
+                </div>
+                <div class="weekly-panel sell-panel">
+                    <h3><i class="fas fa-arrow-down"></i> Verkaufsempfehlungen</h3>
+                    <div class="stock-pick" id="sellPicks"></div>
+                </div>
+            </div>
+
+            <div class="weekly-details" id="weeklyDetails"></div>
+        </section>
+
+        <!-- WIRTSCHAFTSLAGE -->
+        <section id="economic" class="section">
+            <h1>Aktuelle Wirtschaftslage & Marktumfeld</h1>
+            <p class="section-desc">Makrooekonomische Faktoren die in die Analyse einfliessen</p>
+
+            <div class="economic-grid" id="economicGrid"></div>
+
+            <div class="chart-container">
+                <h3>Einfluss der Wirtschaftsfaktoren auf die Bewertung</h3>
+                <canvas id="economicChart"></canvas>
+            </div>
+
+            <div class="economic-summary" id="economicSummary"></div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
