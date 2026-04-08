@@ -50,9 +50,9 @@
                     <div class="kpi-change positive" id="priceChange">+7.49% (1J)</div>
                 </div>
                 <div class="kpi-card highlight">
-                    <div class="kpi-label">Fairer Wert</div>
-                    <div class="kpi-value" id="fairValue">$279.20</div>
-                    <div class="kpi-change positive" id="fairValueDiff">38.1% unterbewertet</div>
+                    <div class="kpi-label">Fairer Wert (Analysten-Konsens)</div>
+                    <div class="kpi-value" id="fairValue">$265.00</div>
+                    <div class="kpi-change positive" id="fairValueDiff">34.8% unterbewertet</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-label">Marktkapitalisierung</div>
@@ -65,6 +65,9 @@
                     <div class="kpi-sub" id="recReason">Sicherheitsmarge: 38.1%</div>
                 </div>
             </div>
+
+            <!-- Analysten-Schaetzungen -->
+            <div class="analyst-box" id="analystBox"></div>
 
             <!-- Valuation Reasoning -->
             <div class="reasoning-box" id="reasoningBox">
@@ -119,70 +122,61 @@
 
         <!-- BEWERTUNG -->
         <section id="valuation" class="section">
-            <h1>Fair Value Berechnung - <span id="valuationTicker">MORN</span></h1>
-            <p class="section-desc">DCF-basierte Bewertung nach DeltaValue-Methode</p>
+            <h1>Bewertung - <span id="valuationTicker">MORN</span></h1>
+            <p class="section-desc">Fair Value basierend auf Analysten-Konsens und eigener Berechnung</p>
 
-            <div class="valuation-panel">
-                <div class="valuation-inputs">
-                    <h3><i class="fas fa-sliders-h"></i> Bewertungsparameter</h3>
-                    <div class="input-group">
-                        <label>Aktueller EPS (Gewinn je Aktie)</label>
-                        <input type="number" id="inputEPS" value="8.87" step="0.01">
-                    </div>
-                    <div class="input-group">
-                        <label>Geschaetztes EPS-Wachstum p.a.</label>
-                        <input type="number" id="inputGrowth" value="12" step="0.5" min="0" max="50">
-                        <span class="unit">%</span>
-                    </div>
-                    <div class="input-group">
-                        <label>Exit-Multiple (KGV in 10 Jahren)</label>
-                        <input type="number" id="inputPE" value="41" step="1">
-                        <span class="hint" id="peHint">Durchschn. 10J KGV: 41.12 | Konservativ: 24</span>
-                    </div>
-                    <div class="input-group">
-                        <label>Geforderte Rendite (Diskontierungssatz)</label>
-                        <input type="number" id="inputDiscount" value="15" step="0.5" min="1" max="30">
-                        <span class="unit">%</span>
-                    </div>
-                    <button class="calc-btn" onclick="calculateFairValue()"><i class="fas fa-calculator"></i> Berechnen</button>
-                </div>
+            <!-- Analysten-Konsens (Primaer) -->
+            <div class="analyst-valuation" id="analystValuation"></div>
 
-                <div class="valuation-result">
-                    <h3>Ergebnis</h3>
-                    <div class="result-box">
-                        <div class="result-item">
-                            <span>EPS in 10 Jahren (Schaetzung)</span>
-                            <strong id="futureEPS">$27.55</strong>
+            <!-- Valuation Reasoning Detail -->
+            <div class="reasoning-detail" id="valuationReasoning"></div>
+
+            <div class="kgv-history chart-container" style="margin-top:20px">
+                <h3>KGV-Historie</h3>
+                <canvas id="kgvChart"></canvas>
+            </div>
+
+            <!-- Eigene Berechnung (Optional, klappbar) -->
+            <div class="manual-calc-toggle" onclick="document.getElementById('manualCalc').classList.toggle('open')">
+                <h3><i class="fas fa-calculator"></i> Eigene Fair-Value-Berechnung (fuer Fortgeschrittene) <i class="fas fa-chevron-down toggle-arrow"></i></h3>
+            </div>
+            <div class="manual-calc-panel" id="manualCalc">
+                <div class="valuation-panel">
+                    <div class="valuation-inputs">
+                        <h3><i class="fas fa-sliders-h"></i> Eigene Parameter</h3>
+                        <div class="input-group">
+                            <label>Aktueller EPS (Gewinn je Aktie)</label>
+                            <input type="number" id="inputEPS" value="8.87" step="0.01">
                         </div>
-                        <div class="result-item">
-                            <span>Kurs in 10 Jahren (Schaetzung)</span>
-                            <strong id="futurePrice">$1,129.50</strong>
+                        <div class="input-group">
+                            <label>Geschaetztes EPS-Wachstum p.a.</label>
+                            <input type="number" id="inputGrowth" value="12" step="0.5" min="0" max="50">
+                            <span class="unit">%</span>
                         </div>
-                        <div class="result-divider"></div>
-                        <div class="result-item big">
-                            <span>Fairer Wert je Aktie (heute)</span>
-                            <strong id="calcFairValue" class="positive">$279.20</strong>
+                        <div class="input-group">
+                            <label>Exit-Multiple (KGV in 10 Jahren)</label>
+                            <input type="number" id="inputPE" value="41" step="1">
+                            <span class="hint" id="peHint">Durchschn. 10J KGV: 41.12 | Konservativ: 24</span>
                         </div>
-                        <div class="result-item big">
-                            <span>Aktueller Aktienkurs</span>
-                            <strong id="calcCurrentPrice">$172.91</strong>
+                        <div class="input-group">
+                            <label>Geforderte Rendite (Diskontierungssatz)</label>
+                            <input type="number" id="inputDiscount" value="15" step="0.5" min="1" max="30">
+                            <span class="unit">%</span>
                         </div>
-                        <div class="result-divider"></div>
-                        <div class="result-item highlight-result">
-                            <span>Sicherheitsmarge</span>
-                            <strong id="calcMargin" class="positive">38.1%</strong>
-                        </div>
-                        <div class="verdict" id="calcVerdict">
-                            <i class="fas fa-thumbs-up"></i> Die Aktie ist deutlich unterbewertet. Starke Kaufgelegenheit!
-                        </div>
+                        <button class="calc-btn" onclick="calculateFairValue()"><i class="fas fa-calculator"></i> Berechnen</button>
                     </div>
-
-                    <!-- Valuation Reasoning Detail -->
-                    <div class="reasoning-detail" id="valuationReasoning"></div>
-
-                    <div class="kgv-history">
-                        <h4>KGV-Historie</h4>
-                        <canvas id="kgvChart"></canvas>
+                    <div class="valuation-result">
+                        <h3>Eigenes Ergebnis</h3>
+                        <div class="result-box">
+                            <div class="result-item"><span>EPS in 10 Jahren</span><strong id="futureEPS">-</strong></div>
+                            <div class="result-item"><span>Kurs in 10 Jahren</span><strong id="futurePrice">-</strong></div>
+                            <div class="result-divider"></div>
+                            <div class="result-item big"><span>Eigener Fairer Wert</span><strong id="calcFairValue">-</strong></div>
+                            <div class="result-item big"><span>Aktueller Kurs</span><strong id="calcCurrentPrice">-</strong></div>
+                            <div class="result-divider"></div>
+                            <div class="result-item highlight-result"><span>Sicherheitsmarge</span><strong id="calcMargin">-</strong></div>
+                            <div class="verdict" id="calcVerdict"></div>
+                        </div>
                     </div>
                 </div>
             </div>

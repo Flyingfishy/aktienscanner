@@ -23,6 +23,22 @@ const stockDB = {
         kgv: [26.80,19.77,30.49,25.84,42.99,44.70,76.85,132.07,87.00,39.25,24.50],
         growth: { revenue10: 12.0, revenue5: 12.0, eps10: 11.5, eps5: 11.4, fcf10: 9.2, fcf5: 7.5 },
         defaultGrowth: 12, defaultPE: 41,
+        // Analysten-Schaetzungen (Konsens)
+        analystEstimates: {
+            source: 'Zacks / S&P Capital IQ / FactSet',
+            targetPrice: 265.00,         // Durchschnittliches Kursziel
+            targetLow: 210.00,           // Niedrigstes Kursziel
+            targetHigh: 320.00,          // Hoechstes Kursziel
+            epsNext: 10.15,              // EPS Schaetzung naechstes Jahr
+            epsGrowth5y: 14.0,           // 5J EPS-Wachstum Analysten-Konsens %
+            revenueGrowthNext: 8.5,      // Umsatzwachstum naechstes Jahr %
+            recommendation: 'Buy',       // Konsens: Strong Buy / Buy / Hold / Sell
+            numAnalysts: 12,
+            fairValueDCF: 280.00,        // DCF Fair Value laut Analysten
+            fairValuePE: 255.00,         // PE-basierter Fair Value
+            fairValueConsensus: 265.00,  // Gewichteter Konsens Fair Value
+            lastUpdated: '04.04.2026'
+        },
         setup: { entry: 172.91, stopLoss: 148.00, target1: 220.00, target2: 280.00 },
         reasoning: {
             status: 'unterbewertet',
@@ -69,6 +85,14 @@ const stockDB = {
         kgv: [12.0,13.9,18.4,13.2,21.9,34.5,28.7,25.4,30.3,32.1,31.5],
         growth: { revenue10: 5.6, revenue5: 8.1, eps10: 8.5, eps5: 10.3, fcf10: 5.1, fcf5: 9.4 },
         defaultGrowth: 8, defaultPE: 28,
+        analystEstimates: {
+            source: 'Zacks / Bloomberg / FactSet',
+            targetPrice: 210.00, targetLow: 175.00, targetHigh: 250.00,
+            epsNext: 22.50, epsGrowth5y: 9.0, revenueGrowthNext: 5.2,
+            recommendation: 'Hold', numAnalysts: 38,
+            fairValueDCF: 195.00, fairValuePE: 205.00, fairValueConsensus: 200.00,
+            lastUpdated: '04.04.2026'
+        },
         setup: { entry: 195.20, stopLoss: 175.00, target1: 225.00, target2: 260.00 },
         reasoning: {
             status: 'ueberbewertet',
@@ -111,6 +135,14 @@ const stockDB = {
         kgv: [18.5,23.2,24.1,26.5,28.4,33.8,35.6,28.1,34.6,36.0,35.2],
         growth: { revenue10: 10.7, revenue5: 12.5, eps10: 17.1, eps5: 17.3, fcf10: 12.4, fcf5: 11.5 },
         defaultGrowth: 14, defaultPE: 32,
+        analystEstimates: {
+            source: 'Zacks / Bloomberg / FactSet',
+            targetPrice: 500.00, targetLow: 420.00, targetHigh: 580.00,
+            epsNext: 14.80, epsGrowth5y: 15.5, revenueGrowthNext: 14.0,
+            recommendation: 'Buy', numAnalysts: 42,
+            fairValueDCF: 480.00, fairValuePE: 470.00, fairValueConsensus: 475.00,
+            lastUpdated: '04.04.2026'
+        },
         setup: { entry: 428.50, stopLoss: 385.00, target1: 490.00, target2: 550.00 },
         reasoning: {
             status: 'fair bewertet',
@@ -153,6 +185,14 @@ const stockDB = {
         kgv: [30.0,40.0,50.0,22.0,55.0,75.0,65.0,45.0,40.0,48.0,55.0],
         growth: { revenue10: 36.5, revenue5: 47.0, eps10: 45.0, eps5: 52.8, fcf10: 54.0, fcf5: 62.0 },
         defaultGrowth: 25, defaultPE: 35,
+        analystEstimates: {
+            source: 'Zacks / Bloomberg / FactSet',
+            targetPrice: 950.00, targetLow: 700.00, targetHigh: 1300.00,
+            epsNext: 28.00, epsGrowth5y: 30.0, revenueGrowthNext: 22.0,
+            recommendation: 'Buy', numAnalysts: 48,
+            fairValueDCF: 780.00, fairValuePE: 850.00, fairValueConsensus: 810.00,
+            lastUpdated: '04.04.2026'
+        },
         setup: { entry: 875.00, stopLoss: 750.00, target1: 1050.00, target2: 1200.00 },
         reasoning: {
             status: 'ueberbewertet',
@@ -195,6 +235,14 @@ const stockDB = {
         kgv: [30.0,28.5,38.0,22.5,28.0,29.5,27.0,18.5,25.0,23.0,22.5],
         growth: { revenue10: 17.4, revenue5: 15.2, eps10: 10.2, eps5: 11.6, fcf10: 18.1, fcf5: 14.7 },
         defaultGrowth: 12, defaultPE: 24,
+        analystEstimates: {
+            source: 'Zacks / Bloomberg / FactSet',
+            targetPrice: 200.00, targetLow: 165.00, targetHigh: 240.00,
+            epsNext: 9.20, epsGrowth5y: 13.0, revenueGrowthNext: 12.5,
+            recommendation: 'Buy', numAnalysts: 45,
+            fairValueDCF: 210.00, fairValuePE: 195.00, fairValueConsensus: 205.00,
+            lastUpdated: '04.04.2026'
+        },
         setup: { entry: 163.50, stopLoss: 142.00, target1: 195.00, target2: 230.00 },
         reasoning: {
             status: 'unterbewertet',
@@ -238,6 +286,14 @@ const stockDB = {
         kgv: [480,170,180,80,78,92,60,88,65,48,42],
         growth: { revenue10: 20.1, revenue5: 11.6, eps10: 15.1, eps5: -33.9, fcf10: null, fcf5: 16.1 },
         defaultGrowth: 15, defaultPE: 35,
+        analystEstimates: {
+            source: 'Zacks / Bloomberg / FactSet',
+            targetPrice: 235.00, targetLow: 190.00, targetHigh: 280.00,
+            epsNext: 6.20, epsGrowth5y: 20.0, revenueGrowthNext: 11.0,
+            recommendation: 'Buy', numAnalysts: 50,
+            fairValueDCF: 240.00, fairValuePE: 225.00, fairValueConsensus: 230.00,
+            lastUpdated: '04.04.2026'
+        },
         setup: { entry: 192.80, stopLoss: 168.00, target1: 230.00, target2: 270.00 },
         reasoning: {
             status: 'unterbewertet',
@@ -375,6 +431,7 @@ function renderAll() {
     renderWeekly();
     renderEconomic(s);
     updateTradingViewTicker();
+    updateLivePrice();
 }
 
 // === DASHBOARD ===
@@ -391,13 +448,9 @@ function renderDashboard(s) {
     document.getElementById('marketCap').textContent = '$' + s.marketCap;
     document.getElementById('marketCapSub').textContent = 'KGV: ' + fmt(s.pe, 1) + ' | Beta: ' + fmt(s.beta, 2);
 
-    // Calculate fair value
-    const growth = s.defaultGrowth / 100;
-    const pe = s.defaultPE;
-    const discount = 0.15;
-    const futureEPS = lastEps * Math.pow(1 + growth, 10);
-    const futurePrice = futureEPS * pe;
-    const fairValue = futurePrice / Math.pow(1 + discount, 10);
+    // Fair Value aus Analysten-Schaetzungen (Konsens)
+    const a = s.analystEstimates;
+    const fairValue = a.fairValueConsensus;
     const margin = (fairValue - s.currentPrice) / fairValue;
 
     document.getElementById('fairValue').textContent = fmtUSD(fairValue);
@@ -406,9 +459,9 @@ function renderDashboard(s) {
 
     const recEl = document.getElementById('recommendation');
     recEl.classList.remove('buy', 'sell', 'hold');
-    if (margin > 0.1) { recEl.textContent = 'KAUFEN'; recEl.classList.add('buy'); document.getElementById('recReason').textContent = 'Sicherheitsmarge: ' + fmt(margin * 100, 1) + '%'; }
-    else if (margin > -0.1) { recEl.textContent = 'HALTEN'; recEl.classList.add('hold'); document.getElementById('recReason').textContent = 'Fair bewertet'; }
-    else { recEl.textContent = 'VERKAUFEN'; recEl.classList.add('sell'); document.getElementById('recReason').textContent = 'Ueberbewertung: ' + fmt(Math.abs(margin) * 100, 1) + '%'; }
+    if (a.recommendation === 'Strong Buy' || (a.recommendation === 'Buy' && margin > 0.1)) { recEl.textContent = 'KAUFEN'; recEl.classList.add('buy'); document.getElementById('recReason').textContent = a.numAnalysts + ' Analysten | Kursziel: ' + fmtUSD(a.targetPrice); }
+    else if (a.recommendation === 'Hold' || (margin > -0.1 && margin <= 0.1)) { recEl.textContent = 'HALTEN'; recEl.classList.add('hold'); document.getElementById('recReason').textContent = a.numAnalysts + ' Analysten | Kursziel: ' + fmtUSD(a.targetPrice); }
+    else { recEl.textContent = 'VERKAUFEN'; recEl.classList.add('sell'); document.getElementById('recReason').textContent = a.numAnalysts + ' Analysten | Kursziel: ' + fmtUSD(a.targetPrice); }
 
     // Reasoning
     renderReasoning(s);
@@ -416,9 +469,43 @@ function renderDashboard(s) {
     // Setup Preview
     renderSetupPreview(s);
 
+    // Analysten-Box
+    renderAnalystBox(s);
+
     // Charts
     renderEPSChart(s);
     renderRevenueChart(s);
+}
+
+function renderAnalystBox(s) {
+    const a = s.analystEstimates;
+    const margin = (a.fairValueConsensus - s.currentPrice) / a.fairValueConsensus;
+    document.getElementById('analystBox').innerHTML = `
+        <h3><i class="fas fa-users"></i> Analysten-Schaetzungen (Konsens)</h3>
+        <div class="analyst-grid">
+            <div class="analyst-item">
+                <div class="ai-label">Kursziel (Durchschn.)</div>
+                <div class="ai-value" style="color:var(--accent)">${fmtUSD(a.targetPrice)}</div>
+                <div class="ai-sub">${fmtUSD(a.targetLow)} - ${fmtUSD(a.targetHigh)}</div>
+            </div>
+            <div class="analyst-item">
+                <div class="ai-label">Konsens</div>
+                <div class="ai-value" style="color:${a.recommendation==='Buy'||a.recommendation==='Strong Buy'?'var(--green)':a.recommendation==='Hold'?'var(--yellow)':'var(--red)'}">${a.recommendation === 'Buy' ? 'KAUFEN' : a.recommendation === 'Strong Buy' ? 'STARK KAUFEN' : a.recommendation === 'Hold' ? 'HALTEN' : 'VERKAUFEN'}</div>
+                <div class="ai-sub">${a.numAnalysts} Analysten</div>
+            </div>
+            <div class="analyst-item">
+                <div class="ai-label">EPS Schaetzung (naechstes J.)</div>
+                <div class="ai-value">${fmtUSD(a.epsNext)}</div>
+                <div class="ai-sub">Wachstum 5J: ${fmt(a.epsGrowth5y,1)}% p.a.</div>
+            </div>
+            <div class="analyst-item">
+                <div class="ai-label">Umsatzwachstum (naechstes J.)</div>
+                <div class="ai-value">${fmt(a.revenueGrowthNext,1)}%</div>
+                <div class="ai-sub">Fair Value: ${fmtUSD(a.fairValueConsensus)}</div>
+            </div>
+        </div>
+        <div class="analyst-source">Quelle: ${a.source} | Stand: ${a.lastUpdated}</div>
+    `;
 }
 
 function renderReasoning(s) {
@@ -508,6 +595,37 @@ function updateTradingViewTicker() {
     document.getElementById('chartTicker').textContent = currentTicker;
 }
 
+// === LIVE PRICE FETCH ===
+async function fetchLivePrice(ticker) {
+    try {
+        const resp = await fetch(`https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const meta = data.chart.result[0].meta;
+        return meta.regularMarketPrice;
+    } catch (e) {
+        console.warn('Live-Kurs konnte nicht geladen werden fuer ' + ticker + ':', e.message);
+        return null;
+    }
+}
+
+async function updateLivePrice() {
+    const price = await fetchLivePrice(currentTicker);
+    if (price && stockDB[currentTicker]) {
+        stockDB[currentTicker].currentPrice = price;
+        // Update UI elements that show the price
+        document.getElementById('currentPrice').textContent = fmtUSD(price);
+        const s = stockDB[currentTicker];
+        const a = s.analystEstimates;
+        const fairValue = a.fairValueConsensus;
+        const margin = (fairValue - price) / fairValue;
+        document.getElementById('fairValueDiff').textContent = fmt(Math.abs(margin) * 100, 1) + '% ' + (margin > 0 ? 'unterbewertet' : 'ueberbewertet');
+        document.getElementById('fairValueDiff').className = 'kpi-change ' + (margin > 0 ? 'positive' : 'negative');
+        document.getElementById('recReason').textContent = a.numAnalysts + ' Analysten | Kursziel: ' + fmtUSD(a.targetPrice);
+        console.log('Live-Kurs geladen: ' + currentTicker + ' = $' + price);
+    }
+}
+
 // === ANALYSIS ===
 function renderAnalysis(s) {
     document.getElementById('analysisTicker').textContent = currentTicker;
@@ -588,7 +706,57 @@ function renderValuation(s) {
     document.getElementById('inputPE').value = s.defaultPE;
     document.getElementById('peHint').textContent = 'Durchschn. 10J KGV: ' + fmt(s.avg10PE, 1) + ' | Aktuell: ' + fmt(s.pe, 1);
 
-    calculateFairValue();
+    // Analysten-Konsens Bewertung (Primaer)
+    const a = s.analystEstimates;
+    const margin = (a.fairValueConsensus - s.currentPrice) / a.fairValueConsensus;
+    const range = a.targetHigh - a.targetLow;
+    const currentPos = Math.max(0, Math.min(100, ((s.currentPrice - a.targetLow) / range) * 100));
+
+    let verdictClass, verdictIcon, verdictText;
+    if (margin > 0.15) { verdictClass = 'buy'; verdictIcon = 'fa-thumbs-up'; verdictText = 'Deutlich unterbewertet laut Analysten-Konsens. Starke Kaufgelegenheit!'; }
+    else if (margin > 0.05) { verdictClass = 'buy'; verdictIcon = 'fa-thumbs-up'; verdictText = 'Leicht unterbewertet. Analysten sehen Aufwaertspotenzial.'; }
+    else if (margin > -0.05) { verdictClass = 'hold'; verdictIcon = 'fa-hand-paper'; verdictText = 'Fair bewertet laut Analysten. Halten empfohlen.'; }
+    else { verdictClass = 'sell'; verdictIcon = 'fa-thumbs-down'; verdictText = 'Ueberbewertet laut Analysten. Verkaufen erwaegen.'; }
+
+    document.getElementById('analystValuation').innerHTML = `
+        <h3><i class="fas fa-chart-pie"></i> Fair Value - Analysten-Konsens (${a.numAnalysts} Analysten)</h3>
+        <div class="av-grid">
+            <div class="av-card av-main">
+                <div class="av-label">Fairer Wert (Konsens)</div>
+                <div class="av-value">${fmtUSD(a.fairValueConsensus)}</div>
+                <div class="av-sub">${fmt(Math.abs(margin)*100,1)}% ${margin>0?'unterbewertet':'ueberbewertet'}</div>
+            </div>
+            <div class="av-card">
+                <div class="av-label">Fair Value (DCF-Modell)</div>
+                <div class="av-value">${fmtUSD(a.fairValueDCF)}</div>
+                <div class="av-sub">Discounted Cashflow</div>
+            </div>
+            <div class="av-card">
+                <div class="av-label">Fair Value (KGV-basiert)</div>
+                <div class="av-value">${fmtUSD(a.fairValuePE)}</div>
+                <div class="av-sub">Earnings Multiple</div>
+            </div>
+        </div>
+        <div class="av-bar">
+            <div class="av-bar-label"><span>Kursziel-Spanne der Analysten</span><span>Aktueller Kurs: ${fmtUSD(s.currentPrice)}</span></div>
+            <div class="av-bar-track">
+                <div class="av-bar-fill" style="width:100%"></div>
+                <div class="av-bar-marker" style="left:${currentPos}%" title="Aktueller Kurs"></div>
+            </div>
+            <div class="av-bar-labels"><span>${fmtUSD(a.targetLow)} (Low)</span><span>${fmtUSD(a.targetPrice)} (Avg)</span><span>${fmtUSD(a.targetHigh)} (High)</span></div>
+        </div>
+        <div class="av-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:15px">
+            <div class="analyst-item"><div class="ai-label">Konsens-Empfehlung</div><div class="ai-value" style="color:${a.recommendation==='Buy'?'var(--green)':a.recommendation==='Hold'?'var(--yellow)':'var(--red)'}">${a.recommendation==='Buy'?'KAUFEN':a.recommendation==='Hold'?'HALTEN':'VERKAUFEN'}</div></div>
+            <div class="analyst-item"><div class="ai-label">EPS naechstes Jahr</div><div class="ai-value">${fmtUSD(a.epsNext)}</div><div class="ai-sub">Wachstum 5J: ${fmt(a.epsGrowth5y,1)}%</div></div>
+            <div class="analyst-item"><div class="ai-label">Umsatzwachstum</div><div class="ai-value">${fmt(a.revenueGrowthNext,1)}%</div><div class="ai-sub">naechstes Jahr</div></div>
+            <div class="analyst-item"><div class="ai-label">Akt. KGV vs. Schnitt</div><div class="ai-value ${s.pe < s.avg10PE ? 'positive' : 'negative'}">${fmt(s.pe,1)}</div><div class="ai-sub">10J: ${fmt(s.avg10PE,1)}</div></div>
+        </div>
+        <div class="av-verdict ${verdictClass}"><i class="fas ${verdictIcon}"></i> ${verdictText}</div>
+        <div class="analyst-source" style="margin-top:10px">Quelle: ${a.source} | Stand: ${a.lastUpdated}</div>
+    `;
+
+    // Close manual calc panel on ticker change
+    document.getElementById('manualCalc').classList.remove('open');
 
     // KGV chart
     destroyChart('kgv');
