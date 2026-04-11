@@ -845,3 +845,11 @@ body {
 }
 #apiKeyBtn:hover { color: var(--accent); border-color: var(--accent); }
 #apiKeyBtn.has-key { color: var(--green); border-color: var(--green); }
+
+.data-source-banner {
+    padding: 10px 16px; border-radius: 8px; margin-bottom: 15px;
+    font-size: 0.85rem; display: flex; align-items: center; gap: 10px;
+}
+.data-source-banner.live { background: rgba(34,197,94,0.1); border: 1px solid var(--green); color: var(--green); }
+.data-source-banner.cached { background: rgba(245,158,11,0.1); border: 1px solid #f59e0b; color: #f59e0b; }
+.data-source-banner a { color: inherit; text-decoration: underline; }

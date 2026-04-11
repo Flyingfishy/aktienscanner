@@ -166,34 +166,35 @@ const stockDB = {
         ]
     },
     NVDA: {
-        name: 'NVIDIA Corp', sector: 'Halbleiter', currentPrice: 875.00,
-        marketCap: '2.15 Bio.', pe: 55.0, avg10PE: 45.0, beta: 1.68,
+        name: 'NVIDIA Corp', sector: 'Halbleiter', currentPrice: 188.63,
+        marketCap: '4.60 Bio.', pe: 55.0, avg10PE: 45.0, beta: 1.68,
         years: [2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025],
-        revenue: [5.0,6.9,9.7,11.7,10.9,16.7,26.9,27.0,60.9,96.0,115.0],
-        eps: [0.54,1.08,1.67,3.05,1.66,2.50,3.85,3.34,11.93,19.50,22.00],
-        fcf: [0.7,1.5,2.9,3.1,2.8,4.7,8.1,3.8,27.0,45.0,52.0],
-        bvps: [3.2,4.2,5.5,6.6,6.8,8.5,12.7,14.1,18.8,28.0,34.0],
-        netIncome: [0.6,1.7,3.0,4.1,2.8,4.3,9.8,4.4,29.8,48.0,55.0],
-        roic: [0.10,0.20,0.28,0.35,0.18,0.25,0.35,0.20,0.56,0.65,0.60],
-        longTermDebt: [1.1,2.0,2.0,2.0,6.0,5.0,5.0,10.0,8.5,7.0,6.0],
-        debtToFCF: [1.57,1.33,0.69,0.65,2.14,1.06,0.62,2.63,0.31,0.16,0.12],
-        interestCoverage: [15.0,25.0,42.0,55.0,18.0,30.0,50.0,22.0,80.0,120.0,140.0],
-        dividend: [0.17,0.23,0.29,0.49,0.62,0.64,0.64,0.64,0.64,0.64,0.64],
-        divYield: [0.015,0.010,0.005,0.003,0.003,0.002,0.001,0.001,0.001,0.001,0.001],
-        payoutRatio: [0.31,0.21,0.17,0.16,0.37,0.26,0.17,0.19,0.05,0.03,0.03],
-        buybackYield: [0.01,0.01,0.01,0.02,0.03,0.01,0.01,0.04,0.01,0.01,0.01],
-        kgv: [30.0,40.0,50.0,22.0,55.0,75.0,65.0,45.0,40.0,48.0,55.0],
-        growth: { revenue10: 36.5, revenue5: 47.0, eps10: 45.0, eps5: 52.8, fcf10: 54.0, fcf5: 62.0 },
+        // Post-Split (10:1 im Juni 2024) - alle historischen Werte angepasst
+        revenue: [5.0,6.9,9.7,11.7,10.9,16.7,26.9,27.0,60.9,96.0,130.5],
+        eps: [0.054,0.108,0.167,0.305,0.166,0.250,0.385,0.334,1.193,2.94,3.50],
+        fcf: [0.7,1.5,2.9,3.1,2.8,4.7,8.1,3.8,27.0,60.0,72.0],
+        bvps: [0.32,0.42,0.55,0.66,0.68,0.85,1.27,1.41,1.88,2.80,3.40],
+        netIncome: [0.6,1.7,3.0,4.1,2.8,4.3,9.8,4.4,29.8,72.9,86.0],
+        roic: [0.10,0.20,0.28,0.35,0.18,0.25,0.35,0.20,0.56,0.85,0.80],
+        longTermDebt: [1.1,2.0,2.0,2.0,6.0,5.0,5.0,10.0,8.5,8.5,8.5],
+        debtToFCF: [1.57,1.33,0.69,0.65,2.14,1.06,0.62,2.63,0.31,0.14,0.12],
+        interestCoverage: [15.0,25.0,42.0,55.0,18.0,30.0,50.0,22.0,80.0,200.0,250.0],
+        dividend: [0.017,0.023,0.029,0.049,0.062,0.064,0.064,0.064,0.064,0.04,0.04],
+        divYield: [0.015,0.010,0.005,0.003,0.003,0.002,0.001,0.001,0.0005,0.0003,0.0002],
+        payoutRatio: [0.31,0.21,0.17,0.16,0.37,0.26,0.17,0.19,0.05,0.014,0.011],
+        buybackYield: [0.01,0.01,0.01,0.02,0.03,0.01,0.01,0.04,0.01,0.02,0.025],
+        kgv: [30.0,40.0,50.0,22.0,55.0,75.0,65.0,45.0,40.0,55.0,54.0],
+        growth: { revenue10: 38.7, revenue5: 50.7, eps10: 50.7, eps5: 56.0, fcf10: 60.0, fcf5: 72.0 },
         defaultGrowth: 25, defaultPE: 35,
         analystEstimates: {
             source: 'Zacks / Bloomberg / FactSet',
-            targetPrice: 950.00, targetLow: 700.00, targetHigh: 1300.00,
-            epsNext: 28.00, epsGrowth5y: 30.0, revenueGrowthNext: 22.0,
-            recommendation: 'Buy', numAnalysts: 48,
-            fairValueDCF: 780.00, fairValuePE: 850.00, fairValueConsensus: 810.00,
-            lastUpdated: '04.04.2026'
+            targetPrice: 220.00, targetLow: 165.00, targetHigh: 280.00,
+            epsNext: 4.50, epsGrowth5y: 30.0, revenueGrowthNext: 22.0,
+            recommendation: 'Buy', numAnalysts: 52,
+            fairValueDCF: 195.00, fairValuePE: 215.00, fairValueConsensus: 210.00,
+            lastUpdated: new Date().toLocaleDateString('de-DE')
         },
-        setup: { entry: 875.00, stopLoss: 750.00, target1: 1050.00, target2: 1200.00 },
+        setup: { entry: 188.63, stopLoss: 165.00, target1: 220.00, target2: 260.00 },
         reasoning: {
             status: 'ueberbewertet',
             summary: 'NVIDIA handelt mit einem KGV von 55 - deutlich ueber dem 10J-Schnitt von 45. Trotz dominanter KI-Position ist das explosive Wachstum bereits eingepreist.',
@@ -606,19 +607,24 @@ async function loadTicker() {
     const input = document.getElementById('tickerInput').value.trim().toUpperCase();
     if (!input || isLoading) return;
 
-    // If not in cache, fetch from API
-    if (!stockDB[input]) {
-        if (!getFmpKey()) {
-            alert('Um neue Ticker zu laden, brauchst du einen kostenlosen API-Key.\n\nKlicke oben rechts auf das Schluessel-Icon, um einen einzurichten.');
-            document.getElementById('apiKeyModal').style.display = 'flex';
-            return;
-        }
+    // Wenn API-Key gesetzt: IMMER frische Daten laden (auch fuer cached Stocks)
+    // Sonst nur Cache verwenden, mit Warnung bei moeglicherweise veralteten Daten
+    const hasKey = !!getFmpKey();
+    if (hasKey) {
         try {
             await fetchStockFromAPI(input);
         } catch (e) {
-            alert('Fehler beim Laden von "' + input + '": ' + e.message + '\n\nPruefe ob der Ticker korrekt ist (z.B. AAPL, MSFT, TSLA).');
-            return;
+            // Wenn Cache vorhanden, fallback - sonst Fehler anzeigen
+            if (!stockDB[input]) {
+                alert('Fehler beim Laden von "' + input + '": ' + e.message + '\n\nPruefe ob der Ticker korrekt ist (z.B. AAPL, MSFT, TSLA).');
+                return;
+            }
+            console.warn('API-Fetch fehlgeschlagen, verwende Cache:', e.message);
         }
+    } else if (!stockDB[input]) {
+        alert('Um neue Ticker zu laden, brauchst du einen kostenlosen API-Key.\n\nKlicke oben rechts auf das Schluessel-Icon, um einen einzurichten.');
+        document.getElementById('apiKeyModal').style.display = 'flex';
+        return;
     }
 
     currentTicker = input;
@@ -663,6 +669,9 @@ function renderDashboard(s) {
     document.getElementById('stockBadge').innerHTML = '<span class="sector">' + s.sector + '</span>';
     document.getElementById('currentPrice').textContent = fmtUSD(s.currentPrice);
 
+    // Stale-Data-Warnung wenn Cache verwendet wird ohne API-Key
+    renderDataSourceBanner(s);
+
     const lastEps = s.eps[s.eps.length - 1];
     const yoyChange = ((s.eps[s.eps.length - 1] / s.eps[s.eps.length - 2]) - 1) * 100;
     document.getElementById('priceChange').textContent = (yoyChange >= 0 ? '+' : '') + fmt(yoyChange, 1) + '% EPS YoY';
@@ -698,6 +707,25 @@ function renderDashboard(s) {
     // Charts
     renderEPSChart(s);
     renderRevenueChart(s);
+}
+
+function renderDataSourceBanner(s) {
+    let banner = document.getElementById('dataSourceBanner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'dataSourceBanner';
+        banner.className = 'data-source-banner';
+        const dashboardSection = document.getElementById('dashboard');
+        if (dashboardSection) dashboardSection.insertBefore(banner, dashboardSection.firstChild.nextSibling);
+    }
+    const isLive = s.analystEstimates && s.analystEstimates.source && s.analystEstimates.source.includes('Financial Modeling Prep');
+    if (isLive) {
+        banner.className = 'data-source-banner live';
+        banner.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Live-Daten</strong> - Geladen via FMP API + Yahoo Finance | Stand: ' + s.analystEstimates.lastUpdated;
+    } else {
+        banner.className = 'data-source-banner cached';
+        banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Demo-Daten (Cache)</strong> - Diese Aktie zeigt vorinstallierte Daten, die veraltet sein koennen. Fuer Live-Daten <a href="#" onclick="document.getElementById(\'apiKeyModal\').style.display=\'flex\';return false">FMP API-Key hinzufuegen</a>.';
+    }
 }
 
 function renderAnalystBox(s) {
