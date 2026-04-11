@@ -318,56 +318,246 @@ const stockDB = {
     }
 };
 
-// === TWITTER/X POSTS DATABASE ===
-const twitterPosts = [
-    { author: 'Donald Trump', handle: '@realDonaldTrump', avatar: '🇺🇸', category: 'trump',
-      text: 'Tariffs on Chinese goods will be increased to 60%! We need FAIR TRADE. American companies will benefit TREMENDOUSLY. Buy American! 🇺🇸',
-      impact: 'bearish', impactText: 'Bearish fuer Tech/Import', time: 'vor 2 Stunden',
-      analysis: 'Erhoehte Zoelle auf chinesische Waren belasten Tech-Unternehmen mit Lieferketten in China (Apple, NVIDIA). Positiv fuer US-Industriewerte.' },
-    { author: 'Donald Trump', handle: '@realDonaldTrump', avatar: '🇺🇸', category: 'trump',
-      text: 'The Fed should CUT RATES NOW! Interest rates are too high, killing our beautiful economy. Jerome Powell needs to act FAST!',
-      impact: 'bullish', impactText: 'Bullish fuer Aktien', time: 'vor 5 Stunden',
-      analysis: 'Politischer Druck auf die Fed fuer Zinssenkungen. Falls die Fed nachgibt, positiv fuer Wachstumsaktien und den breiten Markt.' },
-    { author: 'Elon Musk', handle: '@elonmusk', avatar: '🚀', category: 'musk',
-      text: 'Tesla FSD v13 achieving 10x improvement in miles between interventions. Robotaxi launch on track for Q3. The future is autonomous. 🤖',
-      impact: 'bullish', impactText: 'Bullish fuer TSLA', time: 'vor 3 Stunden',
-      analysis: 'Musk kurbelt TSLA-Hype an. FSD-Fortschritte koennten Bewertung rechtfertigen, aber Vorsicht: Musk hat historisch Deadlines verpasst.' },
-    { author: 'Elon Musk', handle: '@elonmusk', avatar: '🚀', category: 'musk',
-      text: 'AI will replace 80% of jobs. Companies not adopting AI will be left behind. This is inevitable.',
-      impact: 'bullish', impactText: 'Bullish fuer KI-Aktien', time: 'vor 8 Stunden',
-      analysis: 'Unterstuetzt die KI-Investitionsthese. Positiv fuer NVDA, MSFT, GOOGL. Unternehmen muessen in KI investieren.' },
-    { author: 'Federal Reserve', handle: '@FederalReserve', avatar: '🏛', category: 'fed',
-      text: 'FOMC maintains target range at 5.25-5.50%. Inflation remains above target. Economic activity expanding at moderate pace.',
-      impact: 'neutral', impactText: 'Neutral - Erwartet', time: 'vor 1 Tag',
-      analysis: 'Keine Ueberraschung. Zinsen bleiben hoch. Belastet Wachstumswerte weiterhin. Value-Aktien mit stabilen Cashflows bevorzugt.' },
-    { author: 'Christine Lagarde', handle: '@ECB', avatar: '🇪🇺', category: 'fed',
-      text: 'ECB cuts deposit rate by 25bp to 3.25%. Disinflation process well on track. Growth outlook improving for euro area.',
-      impact: 'bullish', impactText: 'Bullish fuer EU-Aktien', time: 'vor 2 Tagen',
-      analysis: 'EZB senkt weiter. Positiv fuer europaeische Aktien und exportorientierte US-Unternehmen. EUR/USD koennte fallen - gut fuer US-Exporte.' },
-    { author: 'Donald Trump', handle: '@realDonaldTrump', avatar: '🇺🇸', category: 'trump',
-      text: 'Big announcement next week on TAX CUTS for American businesses! Corporate tax rate going DOWN. Stocks will SOAR! 📈',
-      impact: 'bullish', impactText: 'Bullish fuer alle Aktien', time: 'vor 12 Stunden',
-      analysis: 'Steuersenkungen erhoehen Nettogewinne direkt. Besonders positiv fuer Unternehmen mit hoher effektiver Steuerquote.' },
-    { author: 'Elon Musk', handle: '@elonmusk', avatar: '🚀', category: 'musk',
-      text: 'DOGE has saved taxpayers $150B so far. Government efficiency is happening. More cuts coming. 🐕',
-      impact: 'neutral', impactText: 'Politisch relevant', time: 'vor 6 Stunden',
-      analysis: 'Staatliche Ausgabenkuerzungen koennten Sektoren wie Defense und IT-Dienstleister fuer die Regierung belasten.' }
-];
-
-// === MARKET ALERTS ===
-const marketAlerts = [
-    { level: 'high', icon: 'fas fa-exclamation-triangle', text: '<strong>WARNUNG:</strong> Trump kuendigt 60% Zoelle auf China an - Tech-Aktien unter Druck', time: '2h' },
-    { level: 'high', icon: 'fas fa-bolt', text: '<strong>BREAKING:</strong> Fed laesst Zinsen unveraendert - naechste Sitzung im Mai entscheidend', time: '1d' },
-    { level: 'medium', icon: 'fas fa-chart-line', text: '<strong>EARNINGS:</strong> Morningstar Q1 Ergebnisse ueber Erwartungen - EPS $2.45', time: '3d' },
-    { level: 'medium', icon: 'fas fa-info-circle', text: '<strong>MAKRO:</strong> US-Arbeitsmarktbericht Freitag - 180K Jobs erwartet', time: '2d' },
-    { level: 'low', icon: 'fas fa-calendar', text: '<strong>TERMIN:</strong> EZB-Zinsentscheid naechste Woche Donnerstag', time: '5d' },
-    { level: 'low', icon: 'fas fa-globe', text: '<strong>GEOPOLITIK:</strong> US-China Handelsgespraeche wieder aufgenommen', time: '4d' }
-];
+// === MARKET NEWS (wird live von Yahoo Finance geladen) ===
+let marketNewsCache = [];
+let marketAlerts = [];
 
 // === STATE ===
 let currentTicker = 'MORN';
 let recentTickers = ['MORN', 'AAPL', 'MSFT'];
 let chartInstances = {};
+let isLoading = false;
+
+// === API KONFIGURATION ===
+// Yahoo: Live-Kurse + News (kein Key, via CORS Proxy)
+// Financial Modeling Prep: Fundamentaldaten (gratis, eigener Key bei financialmodelingprep.com/developer)
+const CORS_PROXY = 'https://corsproxy.io/?';
+const YAHOO_BASE = 'https://query1.finance.yahoo.com';
+const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
+
+function getFmpKey() { return localStorage.getItem('fmp_api_key') || ''; }
+function setFmpKey(key) { localStorage.setItem('fmp_api_key', key); }
+
+async function yahooFetch(path) {
+    const url = CORS_PROXY + YAHOO_BASE + path;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Yahoo API Fehler: ${resp.status}`);
+    return resp.json();
+}
+
+async function fmpFetch(endpoint) {
+    const key = getFmpKey();
+    if (!key) throw new Error('Kein FMP API-Key gesetzt. Klicke oben rechts auf den Schluessel-Button.');
+    const sep = endpoint.includes('?') ? '&' : '?';
+    const resp = await fetch(`${FMP_BASE}${endpoint}${sep}apikey=${key}`);
+    if (!resp.ok) throw new Error(`FMP API Fehler: ${resp.status}`);
+    return resp.json();
+}
+
+function calcCAGR(startVal, endVal, years) {
+    if (!startVal || startVal <= 0 || !endVal || endVal <= 0 || years <= 0) return 0;
+    return (Math.pow(endVal / startVal, 1 / years) - 1) * 100;
+}
+
+async function fetchStockFromAPI(ticker) {
+    showLoading(true);
+    try {
+        // Parallel fetch: FMP fundamentals + Yahoo news + Yahoo chart for live price
+        const [profile, quote, income, cashflow, balance, metrics, ratios, estimates, newsResp, chartResp] = await Promise.all([
+            fmpFetch(`/profile/${ticker}`),
+            fmpFetch(`/quote/${ticker}`),
+            fmpFetch(`/income-statement/${ticker}?limit=11`),
+            fmpFetch(`/cash-flow-statement/${ticker}?limit=11`),
+            fmpFetch(`/balance-sheet-statement/${ticker}?limit=11`),
+            fmpFetch(`/key-metrics/${ticker}?limit=11`),
+            fmpFetch(`/ratios/${ticker}?limit=11`),
+            fmpFetch(`/analyst-estimates/${ticker}?limit=1`).catch(() => []),
+            yahooFetch(`/v1/finance/search?q=${ticker}&newsCount=10&quotesCount=0`).catch(() => ({ news: [] })),
+            yahooFetch(`/v8/finance/chart/${ticker}?interval=1d&range=1d`).catch(() => null)
+        ]);
+
+        if (!profile.length || !quote.length) throw new Error('Ticker nicht gefunden');
+
+        const p = profile[0];
+        const q = quote[0];
+
+        // Live-Kurs von Yahoo (genauer als FMP delayed quote)
+        const livePrice = chartResp && chartResp.chart && chartResp.chart.result && chartResp.chart.result[0] && chartResp.chart.result[0].meta && chartResp.chart.result[0].meta.regularMarketPrice;
+        const currentPrice = livePrice || q.price;
+
+        // Sort financials chronologically
+        const inc = [...income].reverse();
+        const cf = [...cashflow].reverse();
+        const bs = [...balance].reverse();
+        const met = [...metrics].reverse();
+        const rat = [...ratios].reverse();
+
+        const years = inc.map(i => parseInt(i.calendarYear));
+        const revenue = inc.map(i => +(i.revenue / 1e6).toFixed(1));
+        const epsArr = inc.map(i => +(i.eps || 0).toFixed(2));
+        const fcfArr = cf.map(c => +((c.freeCashFlow || 0) / 1e6).toFixed(1));
+        const netIncomeArr = inc.map(i => +(i.netIncome / 1e6).toFixed(1));
+        const ltDebt = bs.map(b => +((b.longTermDebt || 0) / 1e6).toFixed(1));
+        const totalDebt = bs.map(b => (b.totalDebt || b.longTermDebt || 0));
+        const equityArr = bs.map(b => b.totalStockholdersEquity || 1);
+        const bvps = bs.map(b => +((b.totalStockholdersEquity || 0) / (b.commonStock || p.mktCap / currentPrice || 1) * 1e6).toFixed(3));
+        const roicArr = met.map(m => +(m.roic || 0).toFixed(4));
+        const debtToFCF = totalDebt.map((d, i) => fcfArr[i] > 0 ? +((d / 1e6) / fcfArr[i]).toFixed(2) : 0);
+        const interestCov = rat.map(r => +(r.interestCoverage || 0).toFixed(1));
+        const dividend = met.map(m => +((m.dividendPerShare || 0)).toFixed(3));
+        const divYield = met.map(m => +((m.dividendYield || 0)).toFixed(4));
+        const payoutRatio = rat.map(r => +(r.payoutRatio || 0).toFixed(3));
+        const buybackYield = met.map(m => +((m.netDebtToEBITDA && 0) || 0).toFixed(4));
+        const kgvArr = rat.map(r => +(r.priceEarningsRatio || 0).toFixed(2));
+
+        const validKgv = kgvArr.filter(k => k > 0 && k < 200);
+        const avg10PE = validKgv.length ? +(validKgv.reduce((a, b) => a + b, 0) / validKgv.length).toFixed(2) : (q.pe || 20);
+
+        const last = years.length - 1;
+        const len = years.length;
+
+        const growth = {
+            revenue10: len >= 2 && revenue[0] > 0 ? +calcCAGR(revenue[0], revenue[last], last).toFixed(1) : 0,
+            revenue5: len >= 2 && revenue[Math.max(0, last - 4)] > 0 ? +calcCAGR(revenue[Math.max(0, last - 4)], revenue[last], Math.min(4, last)).toFixed(1) : 0,
+            eps10: len >= 2 && epsArr[0] > 0 ? +calcCAGR(epsArr[0], epsArr[last], last).toFixed(1) : 0,
+            eps5: len >= 2 && epsArr[Math.max(0, last - 4)] > 0 ? +calcCAGR(epsArr[Math.max(0, last - 4)], epsArr[last], Math.min(4, last)).toFixed(1) : 0,
+            fcf10: len >= 2 && fcfArr[0] > 0 ? +calcCAGR(fcfArr[0], fcfArr[last], last).toFixed(1) : 0,
+            fcf5: len >= 2 && fcfArr[Math.max(0, last - 4)] > 0 ? +calcCAGR(fcfArr[Math.max(0, last - 4)], fcfArr[last], Math.min(4, last)).toFixed(1) : 0
+        };
+
+        // Analyst estimates
+        const est = estimates.length ? estimates[0] : {};
+        const epsNext = est.estimatedEpsAvg || epsArr[last] * 1.08;
+        const epsGrowth5y = growth.eps5 > 0 ? growth.eps5 : (growth.revenue5 > 0 ? growth.revenue5 : 8);
+
+        // Fair value calculations
+        const lastEps = epsArr[last] || 0;
+        const fairValuePE = +(lastEps * avg10PE).toFixed(2);
+        const futureEPS = lastEps * Math.pow(1 + Math.max(epsGrowth5y, 5) / 100, 10);
+        const fairValueDCF = +(futureEPS * Math.min(avg10PE, 25) / Math.pow(1.10, 10)).toFixed(2);
+        const fairValueConsensus = +((fairValueDCF * 0.4 + fairValuePE * 0.4 + (currentPrice * 1.1) * 0.2).toFixed(2));
+        const margin = (fairValueConsensus - currentPrice) / fairValueConsensus;
+        const recLabel = margin > 0.15 ? 'Buy' : margin > -0.05 ? 'Hold' : 'Sell';
+
+        const marketCap = p.mktCap || q.marketCap || 0;
+        const marketCapStr = marketCap >= 1e12 ? (marketCap / 1e12).toFixed(2) + ' Bio.' :
+                             marketCap >= 1e9 ? (marketCap / 1e9).toFixed(2) + ' Mrd.' :
+                             marketCap >= 1e6 ? (marketCap / 1e6).toFixed(0) + ' Mio.' : '-';
+
+        // Auto-generate reasoning
+        const metricsLike = epsArr.map((_, i) => ({
+            roic: roicArr[i],
+            dividendYield: divYield[i],
+            debtToEquity: equityArr[i] > 0 ? totalDebt[i] / equityArr[i] : 0
+        }));
+        const reasoning = generateReasoning(ticker, p, { pe: q.pe, beta: p.beta }, epsArr, kgvArr, avg10PE, fcfArr, revenue, growth, metricsLike, last, margin);
+
+        // Trade setup
+        const stopLoss = +(currentPrice * 0.90).toFixed(2);
+        const target1 = +(currentPrice * 1.12).toFixed(2);
+        const target2 = +Math.max(fairValueConsensus, currentPrice * 1.25).toFixed(2);
+
+        // Map Yahoo news to our format
+        const news = newsResp.news || [];
+        const newsItems = news.slice(0, 8).map(n => ({
+            title: n.title || 'Kein Titel',
+            date: n.providerPublishTime ? new Date(n.providerPublishTime * 1000).toLocaleDateString('de-DE') : '-',
+            source: n.publisher || 'Yahoo Finance',
+            sentiment: 'neutral',
+            body: (n.summary || n.title || '').substring(0, 250),
+            link: n.link || ''
+        }));
+        if (newsItems.length === 0) {
+            newsItems.push({
+                title: p.companyName + ' - Live-Daten geladen',
+                date: new Date().toLocaleDateString('de-DE'),
+                source: 'FMP API',
+                sentiment: 'neutral',
+                body: 'Kurs: ' + fmtUSD(currentPrice) + ' | KGV: ' + fmt(q.pe || 0, 1) + ' | ' + (p.description || '').substring(0, 200)
+            });
+        }
+
+        const stockData = {
+            name: p.companyName, sector: p.sector || 'Unbekannt', currentPrice,
+            marketCap: marketCapStr, pe: +(q.pe || 0).toFixed(2), avg10PE, beta: +(p.beta || 1.0).toFixed(2),
+            years, revenue, eps: epsArr, fcf: fcfArr, bvps, netIncome: netIncomeArr,
+            roic: roicArr, longTermDebt: ltDebt, debtToFCF, interestCoverage: interestCov,
+            dividend, divYield, payoutRatio, buybackYield, kgv: kgvArr,
+            growth, defaultGrowth: Math.round(Math.max(epsGrowth5y, 5)), defaultPE: Math.round(avg10PE),
+            analystEstimates: {
+                source: 'Financial Modeling Prep + Yahoo (Live)',
+                targetPrice: +fairValueConsensus.toFixed(2),
+                targetLow: +(fairValueConsensus * 0.85).toFixed(2),
+                targetHigh: +(fairValueConsensus * 1.15).toFixed(2),
+                epsNext: +epsNext.toFixed(2),
+                epsGrowth5y: +epsGrowth5y.toFixed(1),
+                revenueGrowthNext: growth.revenue5 > 0 ? +growth.revenue5.toFixed(1) : 5.0,
+                recommendation: recLabel,
+                numAnalysts: est.numberAnalystEstimatedRevenue || 1,
+                fairValueDCF, fairValuePE, fairValueConsensus,
+                lastUpdated: new Date().toLocaleDateString('de-DE')
+            },
+            setup: { entry: currentPrice, stopLoss, target1, target2 },
+            reasoning, news: newsItems
+        };
+
+        stockDB[ticker] = stockData;
+        showLoading(false);
+        return stockData;
+    } catch (e) {
+        showLoading(false);
+        console.error('API-Fehler fuer ' + ticker + ':', e);
+        throw e;
+    }
+}
+
+function generateReasoning(ticker, profile, quote, eps, kgv, avgPE, fcf, revenue, growth, metrics, last, margin) {
+    const status = margin > 0.1 ? 'unterbewertet' : margin < -0.1 ? 'ueberbewertet' : 'fair bewertet';
+    const currentPE = quote.pe || 0;
+    const lastEps = eps[last] || 0;
+    const prevEps = eps[last - 1] || 0;
+    const epsChange = prevEps > 0 ? ((lastEps / prevEps - 1) * 100).toFixed(1) : '0';
+    const lastFcf = fcf[last] || 0;
+
+    const summary = `${profile.companyName} handelt mit einem KGV von ${fmt(currentPE, 1)} ${currentPE < avgPE ? 'unter' : 'ueber'} dem historischen Durchschnitt von ${fmt(avgPE, 1)}. EPS-Veraenderung zum Vorjahr: ${epsChange}%.`;
+
+    const points = [];
+    if (currentPE > 0 && avgPE > 0) {
+        const discount = ((1 - currentPE / avgPE) * 100).toFixed(0);
+        points.push(`KGV von ${fmt(currentPE, 1)} vs. historischer Durchschnitt ${fmt(avgPE, 1)} = ${discount > 0 ? discount + '% Rabatt' : Math.abs(discount) + '% Aufschlag'}`);
+    }
+    if (growth.eps5 > 0) points.push(`EPS-Wachstum (5J CAGR): ${fmt(growth.eps5, 1)}% p.a.`);
+    if (growth.revenue5 > 0) points.push(`Umsatzwachstum (5J CAGR): ${fmt(growth.revenue5, 1)}% p.a.`);
+    if (lastFcf > 0) points.push(`Free Cashflow: $${fmt(lastFcf, 1)} Mio.`);
+    if (metrics[last] && metrics[last].roic > 0.1) points.push(`Starker ROIC von ${fmtPct(metrics[last].roic)}`);
+    if (metrics[last] && metrics[last].dividendYield > 0.01) points.push(`Dividendenrendite: ${fmtPct(metrics[last].dividendYield)}`);
+    if (points.length < 3) points.push(`Sektor: ${profile.sector || 'Unbekannt'} - ${profile.industry || ''}`);
+
+    const risks = [];
+    if (currentPE > avgPE * 1.2) risks.push(`KGV von ${fmt(currentPE, 1)} liegt deutlich ueber dem historischen Durchschnitt`);
+    if (growth.eps5 < 0) risks.push(`EPS ruecklaeufig: ${fmt(growth.eps5, 1)}% p.a. ueber 5 Jahre`);
+    if (metrics[last] && metrics[last].debtToEquity > 2) risks.push(`Hohe Verschuldung: Debt/Equity von ${fmt(metrics[last].debtToEquity, 1)}`);
+    if (quote.beta > 1.5) risks.push(`Hohe Volatilitaet: Beta von ${fmt(quote.beta, 2)}`);
+    if (risks.length === 0) risks.push('Allgemeine Marktrisiken und makrooekonomische Unsicherheiten');
+
+    return { status, summary, points, risks };
+}
+
+function showLoading(show) {
+    isLoading = show;
+    let overlay = document.getElementById('loadingOverlay');
+    if (show) {
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'loadingOverlay';
+            overlay.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><span>Lade Daten...</span></div>';
+            document.body.appendChild(overlay);
+        }
+        overlay.style.display = 'flex';
+    } else if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
 
 // === HELPERS ===
 function fmt(n, d = 2) { return n != null ? n.toFixed(d) : '-'; }
@@ -391,13 +581,46 @@ document.querySelectorAll('.nav-links li').forEach(item => {
 document.getElementById('tickerSearchBtn').addEventListener('click', () => loadTicker());
 document.getElementById('tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadTicker(); });
 
-function loadTicker() {
+// === API KEY MODAL ===
+function updateApiKeyButton() {
+    const btn = document.getElementById('apiKeyBtn');
+    if (btn) btn.classList.toggle('has-key', !!getFmpKey());
+}
+document.getElementById('apiKeyBtn').addEventListener('click', () => {
+    document.getElementById('apiKeyInput').value = getFmpKey();
+    document.getElementById('apiKeyModal').style.display = 'flex';
+});
+document.getElementById('apiKeySaveBtn').addEventListener('click', () => {
+    const key = document.getElementById('apiKeyInput').value.trim();
+    setFmpKey(key);
+    updateApiKeyButton();
+    document.getElementById('apiKeyModal').style.display = 'none';
+    alert(key ? 'API-Key gespeichert! Du kannst nun beliebige Ticker laden.' : 'API-Key entfernt.');
+});
+document.getElementById('apiKeyCancelBtn').addEventListener('click', () => {
+    document.getElementById('apiKeyModal').style.display = 'none';
+});
+updateApiKeyButton();
+
+async function loadTicker() {
     const input = document.getElementById('tickerInput').value.trim().toUpperCase();
-    if (!input) return;
+    if (!input || isLoading) return;
+
+    // If not in cache, fetch from API
     if (!stockDB[input]) {
-        alert('Ticker "' + input + '" nicht in der Datenbank. Verfuegbar: ' + Object.keys(stockDB).join(', '));
-        return;
+        if (!getFmpKey()) {
+            alert('Um neue Ticker zu laden, brauchst du einen kostenlosen API-Key.\n\nKlicke oben rechts auf das Schluessel-Icon, um einen einzurichten.');
+            document.getElementById('apiKeyModal').style.display = 'flex';
+            return;
+        }
+        try {
+            await fetchStockFromAPI(input);
+        } catch (e) {
+            alert('Fehler beim Laden von "' + input + '": ' + e.message + '\n\nPruefe ob der Ticker korrekt ist (z.B. AAPL, MSFT, TSLA).');
+            return;
+        }
     }
+
     currentTicker = input;
     if (!recentTickers.includes(input)) {
         recentTickers.unshift(input);
@@ -596,33 +819,25 @@ function updateTradingViewTicker() {
 }
 
 // === LIVE PRICE FETCH ===
-async function fetchLivePrice(ticker) {
-    try {
-        const resp = await fetch(`https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`);
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        const meta = data.chart.result[0].meta;
-        return meta.regularMarketPrice;
-    } catch (e) {
-        console.warn('Live-Kurs konnte nicht geladen werden fuer ' + ticker + ':', e.message);
-        return null;
-    }
-}
-
 async function updateLivePrice() {
-    const price = await fetchLivePrice(currentTicker);
-    if (price && stockDB[currentTicker]) {
-        stockDB[currentTicker].currentPrice = price;
-        // Update UI elements that show the price
-        document.getElementById('currentPrice').textContent = fmtUSD(price);
-        const s = stockDB[currentTicker];
-        const a = s.analystEstimates;
-        const fairValue = a.fairValueConsensus;
-        const margin = (fairValue - price) / fairValue;
-        document.getElementById('fairValueDiff').textContent = fmt(Math.abs(margin) * 100, 1) + '% ' + (margin > 0 ? 'unterbewertet' : 'ueberbewertet');
-        document.getElementById('fairValueDiff').className = 'kpi-change ' + (margin > 0 ? 'positive' : 'negative');
-        document.getElementById('recReason').textContent = a.numAnalysts + ' Analysten | Kursziel: ' + fmtUSD(a.targetPrice);
-        console.log('Live-Kurs geladen: ' + currentTicker + ' = $' + price);
+    try {
+        const data = await yahooFetch(`/v8/finance/chart/${currentTicker}?interval=1d&range=1d`);
+        const meta = data.chart && data.chart.result && data.chart.result[0] && data.chart.result[0].meta;
+        if (meta && meta.regularMarketPrice && stockDB[currentTicker]) {
+            const price = meta.regularMarketPrice;
+            stockDB[currentTicker].currentPrice = price;
+            stockDB[currentTicker].setup.entry = price;
+            document.getElementById('currentPrice').textContent = fmtUSD(price);
+            const s = stockDB[currentTicker];
+            const a = s.analystEstimates;
+            const fairValue = a.fairValueConsensus;
+            const margin = (fairValue - price) / fairValue;
+            document.getElementById('fairValueDiff').textContent = fmt(Math.abs(margin) * 100, 1) + '% ' + (margin > 0 ? 'unterbewertet' : 'ueberbewertet');
+            document.getElementById('fairValueDiff').className = 'kpi-change ' + (margin > 0 ? 'positive' : 'negative');
+            console.log('Live-Kurs geladen: ' + currentTicker + ' = $' + price);
+        }
+    } catch (e) {
+        console.warn('Live-Kurs konnte nicht geladen werden:', e.message);
     }
 }
 
@@ -926,45 +1141,123 @@ function renderNews(s) {
         <div class="econ-data-item"><span class="ed-label">Arbeitslosenquote</span><span class="ed-value positive">3.7%</span></div>
     `;
 
-    // Twitter
-    renderTwitter('all');
+    // Live Markt-News laden (asynchron)
+    loadMarketNews();
+}
 
-    // Twitter filters
+function timeAgo(timestamp) {
+    const seconds = Math.floor((Date.now() - timestamp * 1000) / 1000);
+    if (seconds < 3600) return 'vor ' + Math.max(1, Math.floor(seconds / 60)) + ' Min.';
+    if (seconds < 86400) return 'vor ' + Math.floor(seconds / 3600) + ' Std.';
+    if (seconds < 604800) return 'vor ' + Math.floor(seconds / 86400) + ' Tagen';
+    return new Date(timestamp * 1000).toLocaleDateString('de-DE');
+}
+
+async function loadMarketNews() {
+    try {
+        // Fetch news for major market indicators in parallel
+        const results = await Promise.all([
+            yahooFetch(`/v1/finance/search?q=SPY&newsCount=8&quotesCount=0`).catch(() => ({ news: [] })),
+            yahooFetch(`/v1/finance/search?q=stock+market&newsCount=8&quotesCount=0`).catch(() => ({ news: [] }))
+        ]);
+
+        // Combine and dedupe news
+        const allNews = [];
+        const seen = new Set();
+        results.forEach(r => {
+            (r.news || []).forEach(n => {
+                if (n.uuid && !seen.has(n.uuid)) {
+                    seen.add(n.uuid);
+                    allNews.push(n);
+                }
+            });
+        });
+
+        // Sort by date (newest first)
+        allNews.sort((a, b) => (b.providerPublishTime || 0) - (a.providerPublishTime || 0));
+        marketNewsCache = allNews.slice(0, 12);
+
+        renderMarketNews('all');
+        renderMarketAlerts();
+    } catch (e) {
+        console.warn('Markt-News konnten nicht geladen werden:', e.message);
+        document.getElementById('twitterContainer').innerHTML = '<div class="news-item">Markt-News konnten nicht geladen werden. Bitte spaeter erneut versuchen.</div>';
+    }
+}
+
+function renderMarketNews(filter) {
+    let posts = marketNewsCache;
+    if (filter && filter !== 'all') {
+        const keywords = { trump: ['trump', 'tariff', 'white house'], musk: ['musk', 'tesla', 'spacex', 'doge'], fed: ['fed', 'powell', 'ecb', 'lagarde', 'rate'] };
+        const kw = keywords[filter] || [];
+        posts = marketNewsCache.filter(n => {
+            const text = ((n.title || '') + ' ' + (n.summary || '')).toLowerCase();
+            return kw.some(k => text.includes(k));
+        });
+    }
+
+    if (posts.length === 0) {
+        document.getElementById('twitterContainer').innerHTML = '<div class="news-item">Keine News in dieser Kategorie gefunden.</div>';
+        return;
+    }
+
+    document.getElementById('twitterContainer').innerHTML = posts.map(n => {
+        const text = ((n.title || '') + ' ' + (n.summary || '')).toLowerCase();
+        let impact = 'neutral', impactText = 'Markt-News';
+        if (/surge|jump|rally|gain|beat|record high|bullish|profit/.test(text)) { impact = 'bullish'; impactText = 'Bullish'; }
+        else if (/fall|drop|plunge|loss|miss|crash|bearish|sell/.test(text)) { impact = 'bearish'; impactText = 'Bearish'; }
+
+        return `
+        <div class="tweet-item">
+            <div class="tweet-header">
+                <div class="tweet-avatar"><i class="fas fa-newspaper"></i></div>
+                <div>
+                    <div class="tweet-name">${n.publisher || 'Yahoo Finance'}</div>
+                    <div class="tweet-handle">@${(n.publisher || 'news').replace(/\s/g, '').toLowerCase()}</div>
+                </div>
+                <span class="tweet-impact ${impact}">${impactText}</span>
+            </div>
+            <div class="tweet-text"><a href="${n.link}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${n.title || ''}</a></div>
+            ${n.summary ? `<div class="tweet-text" style="color:var(--muted);font-size:0.9rem">${n.summary.substring(0, 200)}...</div>` : ''}
+            <div class="tweet-time">${timeAgo(n.providerPublishTime || Date.now() / 1000)}</div>
+        </div>
+        `;
+    }).join('');
+
+    // Re-bind filter buttons
     document.querySelectorAll('.tw-filter').forEach(btn => {
         btn.onclick = () => {
             document.querySelectorAll('.tw-filter').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            renderTwitter(btn.dataset.filter);
+            renderMarketNews(btn.dataset.filter);
+        };
+    });
+}
+
+function renderMarketAlerts() {
+    // Auto-generate alerts from latest news
+    const alerts = marketNewsCache.slice(0, 5).map((n, i) => {
+        const text = (n.title || '').toLowerCase();
+        let level = 'low', icon = 'fas fa-info-circle';
+        if (/breaking|alert|crash|surge|emergency|fed/.test(text)) { level = 'high'; icon = 'fas fa-exclamation-triangle'; }
+        else if (/earnings|beat|miss|report/.test(text)) { level = 'medium'; icon = 'fas fa-chart-line'; }
+        return {
+            level, icon,
+            text: `<strong>${n.publisher || 'News'}:</strong> ${n.title || ''}`,
+            time: timeAgo(n.providerPublishTime || Date.now() / 1000)
         };
     });
 
-    // Alerts
-    document.getElementById('alertContainer').innerHTML = marketAlerts.map(a => `
-        <div class="alert-item alert-${a.level}">
-            <i class="${a.icon}"></i>
-            <div class="alert-text">${a.text}</div>
-            <div class="alert-time">${a.time}</div>
-        </div>
-    `).join('');
-}
-
-function renderTwitter(filter) {
-    const posts = filter === 'all' ? twitterPosts : twitterPosts.filter(p => p.category === filter);
-    document.getElementById('twitterContainer').innerHTML = posts.map(p => `
-        <div class="tweet-item">
-            <div class="tweet-header">
-                <div class="tweet-avatar">${p.avatar}</div>
-                <div>
-                    <div class="tweet-name">${p.author}</div>
-                    <div class="tweet-handle">${p.handle}</div>
-                </div>
-                <span class="tweet-impact ${p.impact}">${p.impactText}</span>
+    const container = document.getElementById('alertContainer');
+    if (container) {
+        container.innerHTML = alerts.map(a => `
+            <div class="alert-item alert-${a.level}">
+                <i class="${a.icon}"></i>
+                <div class="alert-text">${a.text}</div>
+                <div class="alert-time">${a.time}</div>
             </div>
-            <div class="tweet-text">${p.text}</div>
-            <div class="tweet-text" style="color:var(--accent);font-style:italic">Analyse: ${p.analysis}</div>
-            <div class="tweet-time">${p.time}</div>
-        </div>
-    `).join('');
+        `).join('');
+    }
 }
 
 // === WEEKLY ===
