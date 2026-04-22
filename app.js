@@ -336,44 +336,46 @@ let isLoading = false;
 const Y1 = 'https://query1.finance.yahoo.com';
 const Y2 = 'https://query2.finance.yahoo.com';
 
-// Proxy-Strategie: corsproxy.io (schnell) → allorigins.win (zuverlaessig als Backup)
-function buildProxyAttempts(path, base) {
-    const hosts = base ? [base] : [Y1, Y2];
-    const attempts = [];
-    // Versuch 1+2: corsproxy.io (query1 + query2)
-    for (const h of hosts) {
-        attempts.push({ url: `https://corsproxy.io/?${encodeURIComponent(h + path)}`, timeout: 7000 });
-    }
-    // Versuch 3+4: allorigins.win als zuverlaessiger Fallback
-    for (const h of hosts) {
-        attempts.push({ url: `https://api.allorigins.win/raw?url=${encodeURIComponent(h + path)}`, timeout: 15000 });
-    }
-    return attempts;
-}
+// Proxy-Pool: mehrere Dienste + beide Yahoo-Hosts
+const PROXY_LIST = [
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+const TIMEOUTS = [6000, 12000]; // corsproxy schnell, allorigins mehr Zeit
 
 let _yahooCrumb = null;
 let _yahooCrumbExpiry = 0;
 
 async function yahooFetch(path, base) {
-    const attempts = buildProxyAttempts(path, base);
+    const hosts = base ? [base] : [Y1, Y2];
     let lastErr;
-    for (const attempt of attempts) {
-        try {
-            const resp = await fetch(attempt.url, {
-                headers: { 'Accept': 'application/json' },
-                signal: AbortSignal.timeout(attempt.timeout)
-            });
-            if (resp.ok) return resp.json();
-            if (resp.status === 403 || resp.status === 429 || resp.status === 401) {
-                lastErr = new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
-                continue;
-            }
-            throw new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
-        } catch (e) {
-            lastErr = e;
+    for (let pi = 0; pi < PROXY_LIST.length; pi++) {
+        for (const host of hosts) {
+            try {
+                const url = PROXY_LIST[pi](host + path);
+                const resp = await fetch(url, {
+                    headers: { 'Accept': 'application/json' },
+                    signal: AbortSignal.timeout(TIMEOUTS[pi])
+                });
+                if (resp.ok) return resp.json();
+                if (resp.status === 403 || resp.status === 429 || resp.status === 401) {
+                    lastErr = new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
+                    continue;
+                }
+                throw new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
+            } catch (e) { lastErr = e; }
         }
     }
     throw lastErr;
+}
+
+// Preis-Fetch: kurzer Bereich, schnell, darf fehlschlagen
+async function fetchLivePrice(ticker) {
+    try {
+        const d = await yahooFetch(`/v8/finance/chart/${ticker}?interval=1d&range=5d`);
+        return d.chart && d.chart.result && d.chart.result[0] &&
+               d.chart.result[0].meta && d.chart.result[0].meta.regularMarketPrice || null;
+    } catch (e) { return null; }
 }
 
 // Versucht Yahoo-Crumb zu holen (ermoeglicht quoteSummary mit vollen Fundamentaldaten)
@@ -456,24 +458,38 @@ function extractAnnualPrices(timestamps, closes) {
 async function fetchStockFromAPI(ticker) {
     showLoading(true);
     try {
-        // Alle drei Quellen parallel laden
-        const [chartResp, newsResp, tsData] = await Promise.all([
-            yahooFetch(`/v8/finance/chart/${ticker}?interval=3mo&range=10y&events=div,splits`),
-            yahooFetch(`/v1/finance/search?q=${ticker}&newsCount=10&quotesCount=5`, Y1)
-                .catch(() => ({ news: [], quotes: [] })),
+        // Fundamentaldaten + News zuerst laden (robust, selten Probleme)
+        const [tsData, newsResp] = await Promise.all([
             yahooTimeseries(ticker)
-                .catch(e => { console.warn('Timeseries fehlgeschlagen:', e.message); return {}; })
+                .catch(e => { console.warn('Timeseries fehlgeschlagen:', e.message); return null; }),
+            yahooFetch(`/v1/finance/search?q=${ticker}&newsCount=10&quotesCount=5`, Y1)
+                .catch(() => ({ news: [], quotes: [] }))
         ]);
 
-        const chartResult = chartResp.chart && chartResp.chart.result && chartResp.chart.result[0];
-        if (!chartResult) throw new Error(`Ticker "${ticker}" nicht gefunden.`);
+        // Wenn Timeseries gar nicht geladen werden konnte: Ticker ungueltig oder Netzwerkfehler
+        if (!tsData) throw new Error(`Ticker "${ticker}" nicht gefunden oder kein Netzwerk.`);
 
-        const meta       = chartResult.meta || {};
-        const events     = chartResult.events || {};
-        const timestamps = chartResult.timestamp || [];
-        const closes     = (chartResult.indicators && chartResult.indicators.quote &&
-                            chartResult.indicators.quote[0] && chartResult.indicators.quote[0].close) || [];
+        // Chart: kurzfristig fuer Preis + langfristig fuer KGV-Historie – beide optional
+        const [chartShort, chartLong] = await Promise.all([
+            yahooFetch(`/v8/finance/chart/${ticker}?interval=1d&range=5d`)
+                .catch(() => null),
+            yahooFetch(`/v8/finance/chart/${ticker}?interval=3mo&range=10y&events=div,splits`)
+                .catch(() => null)
+        ]);
 
+        // Preis: aus kurzem Chart, Fallback auf langen Chart
+        const shortMeta = chartShort && chartShort.chart && chartShort.chart.result &&
+                          chartShort.chart.result[0] && chartShort.chart.result[0].meta;
+        const longResult = chartLong && chartLong.chart && chartLong.chart.result &&
+                           chartLong.chart.result[0];
+
+        const meta       = shortMeta || (longResult && longResult.meta) || {};
+        const events     = (longResult && longResult.events) || {};
+        const timestamps = (longResult && longResult.timestamp) || [];
+        const closes     = (longResult && longResult.indicators && longResult.indicators.quote &&
+                            longResult.indicators.quote[0] && longResult.indicators.quote[0].close) || [];
+
+        // Preis: aus Chart-Meta, Fallback auf 0 (wird spaeter im Banner angezeigt)
         const currentPrice = meta.regularMarketPrice || meta.chartPreviousClose || 0;
         const companyName  = meta.longName || meta.shortName ||
             (newsResp.quotes && newsResp.quotes[0] &&
@@ -849,12 +865,16 @@ function renderDataSourceBanner(s) {
     const isFull   = isLive && s._hasSummary;
     const rating   = s.analystEstimates.avgRating ? ' | Analysten-Ø: ' + s.analystEstimates.avgRating : '';
 
-    if (isFull) {
+    const noPrice = !s.currentPrice || s.currentPrice === 0;
+    if (isFull && !noPrice) {
         banner.className = 'data-source-banner live';
-        banner.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Live-Daten (vollständig)</strong> – Yahoo Finance QuoteSummary + Chart | Stand: ' + s.analystEstimates.lastUpdated + rating;
-    } else if (isLive) {
+        banner.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Live-Daten</strong> – Yahoo Finance Fundamentals + Chart | Stand: ' + s.analystEstimates.lastUpdated + rating;
+    } else if (isLive && !noPrice) {
         banner.className = 'data-source-banner partial';
-        banner.innerHTML = '<i class="fas fa-info-circle"></i> <strong>Live-Daten (Chart)</strong> – Kurs, EPS & Dividenden aus Yahoo Chart-Events | Stand: ' + s.analystEstimates.lastUpdated + rating;
+        banner.innerHTML = '<i class="fas fa-info-circle"></i> <strong>Live-Daten (ohne Chart)</strong> – Fundamentaldaten geladen, Kurshistorie nicht verfügbar | Stand: ' + s.analystEstimates.lastUpdated;
+    } else if (isLive && noPrice) {
+        banner.className = 'data-source-banner partial';
+        banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Fundamentaldaten geladen – Kurs nicht verfügbar</strong> – Yahoo Chart geblockt. Fundamentaldaten & Fair Value funktionieren. | Stand: ' + s.analystEstimates.lastUpdated;
     } else {
         banner.className = 'data-source-banner cached';
         banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Demo-Daten (Cache)</strong> – Vorinstallierte Daten. Ticker erneut suchen für Live-Daten.';
