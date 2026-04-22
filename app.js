@@ -351,8 +351,19 @@ async function fmpFetch(endpoint) {
     if (!key) throw new Error('Kein FMP API-Key gesetzt. Klicke oben rechts auf den Schluessel-Button.');
     const sep = endpoint.includes('?') ? '&' : '?';
     const resp = await fetch(`${FMP_BASE}${endpoint}${sep}apikey=${key}`);
-    if (!resp.ok) throw new Error(`FMP API Fehler: ${resp.status}`);
+    if (!resp.ok) {
+        if (resp.status === 403) throw new Error(`FMP 403 (Endpoint nicht im Free-Plan oder Ticker nicht freigegeben): ${endpoint}`);
+        if (resp.status === 401) throw new Error(`FMP 401 (Ungueltiger API-Key): ${endpoint}`);
+        if (resp.status === 429) throw new Error(`FMP 429 (Tageslimit erreicht - 250 Calls/Tag): ${endpoint}`);
+        throw new Error(`FMP API Fehler ${resp.status}: ${endpoint}`);
+    }
     return resp.json();
+}
+
+// Wrapper: gibt [] zurueck statt zu werfen, fuer optionale Endpunkte
+async function fmpFetchSafe(endpoint) {
+    try { return await fmpFetch(endpoint); }
+    catch (e) { console.warn('FMP optional fehlgeschlagen:', e.message); return []; }
 }
 
 function calcCAGR(startVal, endVal, years) {
@@ -363,21 +374,30 @@ function calcCAGR(startVal, endVal, years) {
 async function fetchStockFromAPI(ticker) {
     showLoading(true);
     try {
-        // Parallel fetch: FMP fundamentals + Yahoo news + Yahoo chart for live price
-        const [profile, quote, income, cashflow, balance, metrics, ratios, estimates, newsResp, chartResp] = await Promise.all([
-            fmpFetch(`/profile/${ticker}`),
-            fmpFetch(`/quote/${ticker}`),
-            fmpFetch(`/income-statement/${ticker}?limit=11`),
-            fmpFetch(`/cash-flow-statement/${ticker}?limit=11`),
-            fmpFetch(`/balance-sheet-statement/${ticker}?limit=11`),
-            fmpFetch(`/key-metrics/${ticker}?limit=11`),
-            fmpFetch(`/ratios/${ticker}?limit=11`),
-            fmpFetch(`/analyst-estimates/${ticker}?limit=1`).catch(() => []),
+        // Profile + Quote zuerst (Pflicht) - wenn die fehlen, ist Ticker ungueltig
+        let profile, quote;
+        try {
+            [profile, quote] = await Promise.all([
+                fmpFetch(`/profile/${ticker}`),
+                fmpFetch(`/quote/${ticker}`)
+            ]);
+        } catch (e) {
+            throw e;
+        }
+
+        if (!profile.length || !quote.length) throw new Error('Ticker nicht gefunden');
+
+        // Restliche Endpunkte parallel - duerfen einzeln fehlschlagen (Free-Plan-Limits)
+        const [income, cashflow, balance, metrics, ratios, estimates, newsResp, chartResp] = await Promise.all([
+            fmpFetchSafe(`/income-statement/${ticker}?limit=11`),
+            fmpFetchSafe(`/cash-flow-statement/${ticker}?limit=11`),
+            fmpFetchSafe(`/balance-sheet-statement/${ticker}?limit=11`),
+            fmpFetchSafe(`/key-metrics/${ticker}?limit=11`),
+            fmpFetchSafe(`/ratios/${ticker}?limit=11`),
+            fmpFetchSafe(`/analyst-estimates/${ticker}?limit=1`),
             yahooFetch(`/v1/finance/search?q=${ticker}&newsCount=10&quotesCount=0`).catch(() => ({ news: [] })),
             yahooFetch(`/v8/finance/chart/${ticker}?interval=1d&range=1d`).catch(() => null)
         ]);
-
-        if (!profile.length || !quote.length) throw new Error('Ticker nicht gefunden');
 
         const p = profile[0];
         const q = quote[0];
@@ -385,6 +405,17 @@ async function fetchStockFromAPI(ticker) {
         // Live-Kurs von Yahoo (genauer als FMP delayed quote)
         const livePrice = chartResp && chartResp.chart && chartResp.chart.result && chartResp.chart.result[0] && chartResp.chart.result[0].meta && chartResp.chart.result[0].meta.regularMarketPrice;
         const currentPrice = livePrice || q.price;
+
+        // Wenn Free-Plan keinen Income Statement liefert, synthetisiere Minimaldaten aus Quote
+        const financialsBlocked = !income.length && !cashflow.length && !balance.length;
+        if (financialsBlocked) {
+            console.warn(`Fundamentaldaten fuer ${ticker} nicht im Free-Plan. Verwende nur Quote-Basisdaten.`);
+            const curYear = new Date().getFullYear();
+            const epsNow = q.eps || 0;
+            // Einfache Schaetzung fuer Umsatz & Nettoergebnis aus Marktdaten
+            const estRevenue = q.price && q.sharesOutstanding ? (q.price * q.sharesOutstanding * 0.15) : ((p.mktCap || 0) * 0.15);
+            income.push({ calendarYear: curYear, revenue: estRevenue, eps: epsNow, netIncome: estRevenue * 0.12 });
+        }
 
         // Sort financials chronologically
         const inc = [...income].reverse();
@@ -499,7 +530,8 @@ async function fetchStockFromAPI(ticker) {
                 lastUpdated: new Date().toLocaleDateString('de-DE')
             },
             setup: { entry: currentPrice, stopLoss, target1, target2 },
-            reasoning, news: newsItems
+            reasoning, news: newsItems,
+            _financialsBlocked: financialsBlocked
         };
 
         stockDB[ticker] = stockData;
@@ -616,7 +648,19 @@ async function loadTicker() {
         } catch (e) {
             // Wenn Cache vorhanden, fallback - sonst Fehler anzeigen
             if (!stockDB[input]) {
-                alert('Fehler beim Laden von "' + input + '": ' + e.message + '\n\nPruefe ob der Ticker korrekt ist (z.B. AAPL, MSFT, TSLA).');
+                let msg = 'Fehler beim Laden von "' + input + '".';
+                if (e.message.includes('403')) {
+                    msg += '\n\n❌ FMP 403: Dieser Ticker ist im kostenlosen Plan nicht verfuegbar oder das Tageslimit (250 Calls) ist erreicht.\n\n💡 Tipp: Grosse US-Aktien (AAPL, MSFT, GOOGL, TSLA, AMZN usw.) funktionieren am besten. Kleinere Werte koennen einen bezahlten Plan benoetigen.';
+                } else if (e.message.includes('401')) {
+                    msg += '\n\n❌ FMP 401: Ungueltiger API-Key. Bitte Key pruefen.';
+                } else if (e.message.includes('429')) {
+                    msg += '\n\n❌ FMP 429: Tageslimit (250 Calls) erreicht. Bitte morgen erneut versuchen.';
+                } else if (e.message.includes('nicht gefunden')) {
+                    msg += '\n\n❌ Ticker "' + input + '" wurde nicht gefunden. Bitte US-Ticker (z.B. AAPL, MSFT, TSLA) verwenden.';
+                } else {
+                    msg += '\n\nDetails: ' + e.message;
+                }
+                alert(msg);
                 return;
             }
             console.warn('API-Fetch fehlgeschlagen, verwende Cache:', e.message);
@@ -718,10 +762,15 @@ function renderDataSourceBanner(s) {
         const dashboardSection = document.getElementById('dashboard');
         if (dashboardSection) dashboardSection.insertBefore(banner, dashboardSection.firstChild.nextSibling);
     }
-    const isLive = s.analystEstimates && s.analystEstimates.source && s.analystEstimates.source.includes('Financial Modeling Prep');
-    if (isLive) {
+    const src = s.analystEstimates && s.analystEstimates.source ? s.analystEstimates.source : '';
+    const isLive = src.includes('Financial Modeling Prep');
+    const isPartial = isLive && s._financialsBlocked;
+    if (isLive && !isPartial) {
         banner.className = 'data-source-banner live';
         banner.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Live-Daten</strong> - Geladen via FMP API + Yahoo Finance | Stand: ' + s.analystEstimates.lastUpdated;
+    } else if (isPartial) {
+        banner.className = 'data-source-banner partial';
+        banner.innerHTML = '<i class="fas fa-info-circle"></i> <strong>Teilweise Live</strong> - Kurs & Basisdaten von FMP/Yahoo. Historische Fundamentaldaten nicht im Free-Plan enthalten. | Stand: ' + s.analystEstimates.lastUpdated;
     } else {
         banner.className = 'data-source-banner cached';
         banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Demo-Daten (Cache)</strong> - Diese Aktie zeigt vorinstallierte Daten, die veraltet sein koennen. Fuer Live-Daten <a href="#" onclick="document.getElementById(\'apiKeyModal\').style.display=\'flex\';return false">FMP API-Key hinzufuegen</a>.';
