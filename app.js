@@ -341,11 +341,25 @@ let _yahooCrumb = null;
 let _yahooCrumbExpiry = 0;
 
 async function yahooFetch(path, base) {
-    const host = base || Y1;
-    const url = CORS_PROXY + encodeURIComponent(host + path);
-    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!resp.ok) throw new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
-    return resp.json();
+    // Versuche query1, bei 403/429 automatisch query2 als Fallback
+    const hosts = base ? [base] : [Y1, Y2];
+    let lastErr;
+    for (const host of hosts) {
+        try {
+            const url = CORS_PROXY + encodeURIComponent(host + path);
+            const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (resp.ok) return resp.json();
+            if (resp.status === 403 || resp.status === 429) {
+                lastErr = new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
+                continue; // naechsten Host versuchen
+            }
+            throw new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
+        } catch (e) {
+            lastErr = e;
+            if (hosts.indexOf(host) < hosts.length - 1) continue;
+        }
+    }
+    throw lastErr;
 }
 
 // Versucht Yahoo-Crumb zu holen (ermoeglicht quoteSummary mit vollen Fundamentaldaten)
