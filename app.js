@@ -332,38 +332,69 @@ let isLoading = false;
 // === API KONFIGURATION ===
 // Yahoo: Live-Kurse + News (kein Key, via CORS Proxy)
 // Financial Modeling Prep: Fundamentaldaten (gratis, eigener Key bei financialmodelingprep.com/developer)
+// === YAHOO FINANCE API (kein Key noetig) ===
 const CORS_PROXY = 'https://corsproxy.io/?';
-const YAHOO_BASE = 'https://query1.finance.yahoo.com';
-const FMP_BASE = 'https://financialmodelingprep.com/api/v3';
+const Y1 = 'https://query1.finance.yahoo.com';
+const Y2 = 'https://query2.finance.yahoo.com';
 
-function getFmpKey() { return localStorage.getItem('fmp_api_key') || ''; }
-function setFmpKey(key) { localStorage.setItem('fmp_api_key', key); }
+let _yahooCrumb = null;
+let _yahooCrumbExpiry = 0;
 
-async function yahooFetch(path) {
-    const url = CORS_PROXY + YAHOO_BASE + path;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`Yahoo API Fehler: ${resp.status}`);
+async function yahooFetch(path, base) {
+    const host = base || Y1;
+    const url = CORS_PROXY + encodeURIComponent(host + path);
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) throw new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
     return resp.json();
 }
 
-async function fmpFetch(endpoint) {
-    const key = getFmpKey();
-    if (!key) throw new Error('Kein FMP API-Key gesetzt. Klicke oben rechts auf den Schluessel-Button.');
-    const sep = endpoint.includes('?') ? '&' : '?';
-    const resp = await fetch(`${FMP_BASE}${endpoint}${sep}apikey=${key}`);
-    if (!resp.ok) {
-        if (resp.status === 403) throw new Error(`FMP 403 (Endpoint nicht im Free-Plan oder Ticker nicht freigegeben): ${endpoint}`);
-        if (resp.status === 401) throw new Error(`FMP 401 (Ungueltiger API-Key): ${endpoint}`);
-        if (resp.status === 429) throw new Error(`FMP 429 (Tageslimit erreicht - 250 Calls/Tag): ${endpoint}`);
-        throw new Error(`FMP API Fehler ${resp.status}: ${endpoint}`);
+// Versucht Yahoo-Crumb zu holen (ermoeglicht quoteSummary mit vollen Fundamentaldaten)
+async function getYahooCrumb() {
+    if (_yahooCrumb && Date.now() < _yahooCrumbExpiry) return _yahooCrumb;
+    try {
+        // query2 ist oft weniger strikt als query1
+        const resp = await fetch(CORS_PROXY + encodeURIComponent(Y2 + '/v1/test/getcrumb'), {
+            headers: { 'Accept': 'text/plain,*/*', 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (resp.ok) {
+            const text = (await resp.text()).trim();
+            // Gueltiger Crumb: kurzer alphanumerischer String, kein HTML/JSON
+            if (text && text.length < 30 && !text.includes('<') && !text.includes('{')) {
+                _yahooCrumb = text;
+                _yahooCrumbExpiry = Date.now() + 3_600_000; // 1h cachen
+                console.log('Yahoo Crumb erhalten:', _yahooCrumb);
+                return _yahooCrumb;
+            }
+        }
+    } catch (e) { console.warn('Crumb-Abruf fehlgeschlagen:', e.message); }
+    return null;
+}
+
+// Historische Fundamentaldaten via fundamentals-timeseries (kein Crumb noetig!)
+async function yahooTimeseries(ticker) {
+    const p1 = Math.floor(new Date('2010-01-01').getTime() / 1000);
+    const p2 = Math.floor(Date.now() / 1000);
+    const types = 'annualDilutedEPS,annualTotalRevenue,annualNetIncome,annualFreeCashFlow,annualLongTermDebt,annualStockholdersEquity,annualBookValue,annualReturnOnEquity';
+    const path = `/ws/fundamentals-timeseries/v1/finance/timeseries/${ticker}?type=${types}&period1=${p1}&period2=${p2}`;
+    const data = await yahooFetch(path, Y1);
+    if (!data.timeseries || !data.timeseries.result) throw new Error('Keine Zeitreihendaten');
+    const out = {};
+    for (const series of data.timeseries.result) {
+        const type = series.meta && series.meta.type && series.meta.type[0];
+        if (type && series[type] && series[type].length > 0) {
+            out[type] = [...series[type]].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate));
+        }
     }
-    return resp.json();
+    return out;
 }
 
-// Wrapper: gibt [] zurueck statt zu werfen, fuer optionale Endpunkte
-async function fmpFetchSafe(endpoint) {
-    try { return await fmpFetch(endpoint); }
-    catch (e) { console.warn('FMP optional fehlgeschlagen:', e.message); return []; }
+// Hilfsfunktion: Wert fuer ein Jahr aus Zeitreihendaten extrahieren (nach asOfDate-Jahr)
+function tsVal(series, year, divisor) {
+    if (!series) return 0;
+    const item = series.find(d => d.asOfDate && d.asOfDate.startsWith(year));
+    if (!item || !item.reportedValue) return 0;
+    const raw = item.reportedValue.raw;
+    return raw != null ? +((raw / (divisor || 1))).toFixed(divisor && divisor >= 1e6 ? 1 : 2) : 0;
 }
 
 function calcCAGR(startVal, endVal, years) {
@@ -371,176 +402,232 @@ function calcCAGR(startVal, endVal, years) {
     return (Math.pow(endVal / startVal, 1 / years) - 1) * 100;
 }
 
+function calcGrowth(arr) {
+    const len = arr.length;
+    const last = len - 1;
+    return {
+        rev10: 0, rev5: 0, // wird spaeter befuellt falls revenue vorhanden
+        eps10: len >= 2 && arr[0] > 0 ? +calcCAGR(arr[0], arr[last], last).toFixed(1) : 0,
+        eps5:  len >= 5 && arr[last-4] > 0 ? +calcCAGR(arr[last-4], arr[last], 4).toFixed(1) : (len >= 2 && arr[0] > 0 ? +calcCAGR(arr[0], arr[last], last).toFixed(1) : 0),
+        fcf10: 0, fcf5: 0,
+        revenue10: 0, revenue5: 0
+    };
+}
+
+// Kurs-Historie aus Chart-Daten → jaehrliche Schlusskurse
+function extractAnnualPrices(timestamps, closes) {
+    const byYear = {};
+    (timestamps || []).forEach((ts, i) => {
+        if (closes[i] == null) return;
+        const y = new Date(ts * 1000).getFullYear();
+        byYear[y] = closes[i]; // letzter Kurs des Jahres ueberschreibt
+    });
+    return byYear;
+}
+
 async function fetchStockFromAPI(ticker) {
     showLoading(true);
     try {
-        // Profile + Quote zuerst (Pflicht) - wenn die fehlen, ist Ticker ungueltig
-        let profile, quote;
-        try {
-            [profile, quote] = await Promise.all([
-                fmpFetch(`/profile/${ticker}`),
-                fmpFetch(`/quote/${ticker}`)
-            ]);
-        } catch (e) {
-            throw e;
-        }
-
-        if (!profile.length || !quote.length) throw new Error('Ticker nicht gefunden');
-
-        // Restliche Endpunkte parallel - duerfen einzeln fehlschlagen (Free-Plan-Limits)
-        const [income, cashflow, balance, metrics, ratios, estimates, newsResp, chartResp] = await Promise.all([
-            fmpFetchSafe(`/income-statement/${ticker}?limit=11`),
-            fmpFetchSafe(`/cash-flow-statement/${ticker}?limit=11`),
-            fmpFetchSafe(`/balance-sheet-statement/${ticker}?limit=11`),
-            fmpFetchSafe(`/key-metrics/${ticker}?limit=11`),
-            fmpFetchSafe(`/ratios/${ticker}?limit=11`),
-            fmpFetchSafe(`/analyst-estimates/${ticker}?limit=1`),
-            yahooFetch(`/v1/finance/search?q=${ticker}&newsCount=10&quotesCount=0`).catch(() => ({ news: [] })),
-            yahooFetch(`/v8/finance/chart/${ticker}?interval=1d&range=1d`).catch(() => null)
+        // Alle drei Quellen parallel laden
+        const [chartResp, newsResp, tsData] = await Promise.all([
+            yahooFetch(`/v8/finance/chart/${ticker}?interval=3mo&range=10y&events=div,splits`),
+            yahooFetch(`/v1/finance/search?q=${ticker}&newsCount=10&quotesCount=5`, Y1)
+                .catch(() => ({ news: [], quotes: [] })),
+            yahooTimeseries(ticker)
+                .catch(e => { console.warn('Timeseries fehlgeschlagen:', e.message); return {}; })
         ]);
 
-        const p = profile[0];
-        const q = quote[0];
+        const chartResult = chartResp.chart && chartResp.chart.result && chartResp.chart.result[0];
+        if (!chartResult) throw new Error(`Ticker "${ticker}" nicht gefunden.`);
 
-        // Live-Kurs von Yahoo (genauer als FMP delayed quote)
-        const livePrice = chartResp && chartResp.chart && chartResp.chart.result && chartResp.chart.result[0] && chartResp.chart.result[0].meta && chartResp.chart.result[0].meta.regularMarketPrice;
-        const currentPrice = livePrice || q.price;
+        const meta       = chartResult.meta || {};
+        const events     = chartResult.events || {};
+        const timestamps = chartResult.timestamp || [];
+        const closes     = (chartResult.indicators && chartResult.indicators.quote &&
+                            chartResult.indicators.quote[0] && chartResult.indicators.quote[0].close) || [];
 
-        // Wenn Free-Plan keinen Income Statement liefert, synthetisiere Minimaldaten aus Quote
-        const financialsBlocked = !income.length && !cashflow.length && !balance.length;
-        if (financialsBlocked) {
-            console.warn(`Fundamentaldaten fuer ${ticker} nicht im Free-Plan. Verwende nur Quote-Basisdaten.`);
-            const curYear = new Date().getFullYear();
-            const epsNow = q.eps || 0;
-            // Einfache Schaetzung fuer Umsatz & Nettoergebnis aus Marktdaten
-            const estRevenue = q.price && q.sharesOutstanding ? (q.price * q.sharesOutstanding * 0.15) : ((p.mktCap || 0) * 0.15);
-            income.push({ calendarYear: curYear, revenue: estRevenue, eps: epsNow, netIncome: estRevenue * 0.12 });
+        const currentPrice = meta.regularMarketPrice || meta.chartPreviousClose || 0;
+        const companyName  = meta.longName || meta.shortName ||
+            (newsResp.quotes && newsResp.quotes[0] &&
+             (newsResp.quotes[0].longname || newsResp.quotes[0].shortname)) || ticker;
+
+        // === Jahre aus Timeseries-Daten (EPS als Anker) ===
+        const epsData = tsData.annualDilutedEPS || [];
+        const revData = tsData.annualTotalRevenue || [];
+
+        // Jahreslabels aus asOfDate ableiten (Fiskaljahr-Enddatum)
+        const years = epsData.map(d => d.asOfDate.slice(0, 4)); // z.B. "2024"
+
+        const epsArr      = epsData.map(d => +(d.reportedValue && d.reportedValue.raw != null ? d.reportedValue.raw : 0).toFixed(2));
+        const revenue     = revData.map(d => +((d.reportedValue && d.reportedValue.raw ? d.reportedValue.raw : 0) / 1e9).toFixed(2));
+        // Revenue zu Jahreslabels ausrichten
+        const revenueAligned = years.map(y => {
+            const item = revData.find(d => d.asOfDate && d.asOfDate.startsWith(y));
+            return item && item.reportedValue ? +((item.reportedValue.raw || 0) / 1e9).toFixed(2) : 0;
+        });
+
+        const fcfData     = tsData.annualFreeCashFlow || [];
+        const fcfArr      = years.map(y => {
+            const item = fcfData.find(d => d.asOfDate && d.asOfDate.startsWith(y));
+            return item && item.reportedValue ? +((item.reportedValue.raw || 0) / 1e9).toFixed(2) : 0;
+        });
+
+        const niData      = tsData.annualNetIncome || [];
+        const netIncomeArr = years.map(y => {
+            const item = niData.find(d => d.asOfDate && d.asOfDate.startsWith(y));
+            return item && item.reportedValue ? +((item.reportedValue.raw || 0) / 1e9).toFixed(2) : 0;
+        });
+
+        const debtData    = tsData.annualLongTermDebt || [];
+        const ltDebt      = years.map(y => {
+            const item = debtData.find(d => d.asOfDate && d.asOfDate.startsWith(y));
+            return item && item.reportedValue ? +((item.reportedValue.raw || 0) / 1e9).toFixed(2) : 0;
+        });
+
+        const bvData      = tsData.annualBookValue || [];
+        const bvps        = years.map(y => {
+            const item = bvData.find(d => d.asOfDate && d.asOfDate.startsWith(y));
+            return item && item.reportedValue ? +(item.reportedValue.raw || 0).toFixed(2) : 0;
+        });
+
+        const roeData     = tsData.annualReturnOnEquity || [];
+        const roicArr     = years.map(y => {
+            const item = roeData.find(d => d.asOfDate && d.asOfDate.startsWith(y));
+            return item && item.reportedValue ? +(item.reportedValue.raw || 0).toFixed(4) : 0;
+        });
+
+        // Fallback: wenn Timeseries leer, wenigstens ein Jahr mit Nullen
+        if (years.length === 0) {
+            years.push(String(new Date().getFullYear()));
+            epsArr.push(0); revenueAligned.push(0); fcfArr.push(0); netIncomeArr.push(0);
+            ltDebt.push(0); bvps.push(0); roicArr.push(0);
         }
 
-        // Sort financials chronologically
-        const inc = [...income].reverse();
-        const cf = [...cashflow].reverse();
-        const bs = [...balance].reverse();
-        const met = [...metrics].reverse();
-        const rat = [...ratios].reverse();
+        const placeholder = years.map(() => 0);
 
-        const years = inc.map(i => parseInt(i.calendarYear));
-        const revenue = inc.map(i => +(i.revenue / 1e6).toFixed(1));
-        const epsArr = inc.map(i => +(i.eps || 0).toFixed(2));
-        const fcfArr = cf.map(c => +((c.freeCashFlow || 0) / 1e6).toFixed(1));
-        const netIncomeArr = inc.map(i => +(i.netIncome / 1e6).toFixed(1));
-        const ltDebt = bs.map(b => +((b.longTermDebt || 0) / 1e6).toFixed(1));
-        const totalDebt = bs.map(b => (b.totalDebt || b.longTermDebt || 0));
-        const equityArr = bs.map(b => b.totalStockholdersEquity || 1);
-        const bvps = bs.map(b => +((b.totalStockholdersEquity || 0) / (b.commonStock || p.mktCap / currentPrice || 1) * 1e6).toFixed(3));
-        const roicArr = met.map(m => +(m.roic || 0).toFixed(4));
-        const debtToFCF = totalDebt.map((d, i) => fcfArr[i] > 0 ? +((d / 1e6) / fcfArr[i]).toFixed(2) : 0);
-        const interestCov = rat.map(r => +(r.interestCoverage || 0).toFixed(1));
-        const dividend = met.map(m => +((m.dividendPerShare || 0)).toFixed(3));
-        const divYield = met.map(m => +((m.dividendYield || 0)).toFixed(4));
-        const payoutRatio = rat.map(r => +(r.payoutRatio || 0).toFixed(3));
-        const buybackYield = met.map(m => +((m.netDebtToEBITDA && 0) || 0).toFixed(4));
-        const kgvArr = rat.map(r => +(r.priceEarningsRatio || 0).toFixed(2));
+        // === Dividenden aus Chart-Events ===
+        const divRaw = events.dividends ? Object.values(events.dividends) : [];
+        const divByYear = {};
+        divRaw.forEach(d => {
+            if (!d.date || !d.amount) return;
+            const y = String(new Date(d.date * 1000).getFullYear());
+            divByYear[y] = (divByYear[y] || 0) + d.amount;
+        });
+        const dividend  = years.map(y => +(divByYear[y] || 0).toFixed(3));
+        const divYield  = years.map(y => {
+            const d = divByYear[y] || 0;
+            return d > 0 && currentPrice > 0 ? +(d / currentPrice).toFixed(4) : 0;
+        });
 
-        const validKgv = kgvArr.filter(k => k > 0 && k < 200);
-        const avg10PE = validKgv.length ? +(validKgv.reduce((a, b) => a + b, 0) / validKgv.length).toFixed(2) : (q.pe || 20);
+        // === Historisches KGV aus Kurshistorie ===
+        const annualPrices = extractAnnualPrices(timestamps, closes);
+        const kgvArr = years.map((y, i) => {
+            const eps   = epsArr[i];
+            const price = annualPrices[parseInt(y)];
+            return eps > 0 && price > 0 ? +(price / eps).toFixed(2) : 0;
+        });
+        const validKgv  = kgvArr.filter(k => k > 0 && k < 500);
+        const avg10PE   = validKgv.length
+            ? +(validKgv.reduce((a, b) => a + b, 0) / validKgv.length).toFixed(2)
+            : 20;
 
-        const last = years.length - 1;
-        const len = years.length;
+        const lastIdx    = years.length - 1;
+        const lastEps    = epsArr[lastIdx] || 0;
+        const currentPE  = lastEps > 0 ? +(currentPrice / lastEps).toFixed(2) : 0;
 
+        // === Wachstumsraten ===
+        const posEps = epsArr.filter(e => e > 0);
+        const posRev = revenueAligned.filter(r => r > 0);
+        const posFcf = fcfArr.filter(f => f > 0);
         const growth = {
-            revenue10: len >= 2 && revenue[0] > 0 ? +calcCAGR(revenue[0], revenue[last], last).toFixed(1) : 0,
-            revenue5: len >= 2 && revenue[Math.max(0, last - 4)] > 0 ? +calcCAGR(revenue[Math.max(0, last - 4)], revenue[last], Math.min(4, last)).toFixed(1) : 0,
-            eps10: len >= 2 && epsArr[0] > 0 ? +calcCAGR(epsArr[0], epsArr[last], last).toFixed(1) : 0,
-            eps5: len >= 2 && epsArr[Math.max(0, last - 4)] > 0 ? +calcCAGR(epsArr[Math.max(0, last - 4)], epsArr[last], Math.min(4, last)).toFixed(1) : 0,
-            fcf10: len >= 2 && fcfArr[0] > 0 ? +calcCAGR(fcfArr[0], fcfArr[last], last).toFixed(1) : 0,
-            fcf5: len >= 2 && fcfArr[Math.max(0, last - 4)] > 0 ? +calcCAGR(fcfArr[Math.max(0, last - 4)], fcfArr[last], Math.min(4, last)).toFixed(1) : 0
+            eps10:    posEps.length >= 2 ? +calcCAGR(posEps[0], posEps[posEps.length-1], posEps.length - 1).toFixed(1) : 0,
+            eps5:     posEps.length >= 2 ? +calcCAGR(posEps[Math.max(0, posEps.length-5)], posEps[posEps.length-1], Math.min(4, posEps.length-1)).toFixed(1) : 0,
+            revenue10: posRev.length >= 2 ? +calcCAGR(posRev[0], posRev[posRev.length-1], posRev.length - 1).toFixed(1) : 0,
+            revenue5:  posRev.length >= 2 ? +calcCAGR(posRev[Math.max(0, posRev.length-5)], posRev[posRev.length-1], Math.min(4, posRev.length-1)).toFixed(1) : 0,
+            fcf10:    posFcf.length >= 2 ? +calcCAGR(posFcf[0], posFcf[posFcf.length-1], posFcf.length - 1).toFixed(1) : 0,
+            fcf5:     posFcf.length >= 2 ? +calcCAGR(posFcf[Math.max(0, posFcf.length-5)], posFcf[posFcf.length-1], Math.min(4, posFcf.length-1)).toFixed(1) : 0,
         };
 
-        // Analyst estimates
-        const est = estimates.length ? estimates[0] : {};
-        const epsNext = est.estimatedEpsAvg || epsArr[last] * 1.08;
-        const epsGrowth5y = growth.eps5 > 0 ? growth.eps5 : (growth.revenue5 > 0 ? growth.revenue5 : 8);
-
-        // Fair value calculations
-        const lastEps = epsArr[last] || 0;
-        const fairValuePE = +(lastEps * avg10PE).toFixed(2);
-        const futureEPS = lastEps * Math.pow(1 + Math.max(epsGrowth5y, 5) / 100, 10);
-        const fairValueDCF = +(futureEPS * Math.min(avg10PE, 25) / Math.pow(1.10, 10)).toFixed(2);
-        const fairValueConsensus = +((fairValueDCF * 0.4 + fairValuePE * 0.4 + (currentPrice * 1.1) * 0.2).toFixed(2));
-        const margin = (fairValueConsensus - currentPrice) / fairValueConsensus;
+        // === Fair Value ===
+        // Wachstumsrate fuer DCF auf realistisches Maximum begrenzen
+        // (verhindert Explosion bei Hochwaschstums-Titeln wie NVDA)
+        const rawGrowth = growth.eps5 > 0 ? growth.eps5 :
+                          growth.eps10 > 0 ? growth.eps10 :
+                          growth.revenue5 > 0 ? growth.revenue5 : 8;
+        const epsGrowth5y = Math.min(rawGrowth, 35); // max 35% p.a. fuer DCF-Berechnung
+        const dcfPE = avg10PE > 0 ? Math.min(avg10PE, 30) : 20; // vernuenftiger PE fuer DCF
+        const fairValuePE  = avg10PE > 0 ? +(lastEps * avg10PE).toFixed(2) : +(lastEps * 20).toFixed(2);
+        const futureEPS    = lastEps * Math.pow(1 + Math.max(epsGrowth5y, 5) / 100, 10);
+        const fairValueDCF = +(futureEPS * dcfPE / Math.pow(1.10, 10)).toFixed(2);
+        // Wenn PE-basierter Fairer Wert = 0 (keine historischen PE-Daten), nur DCF verwenden
+        const fairValueConsensus = fairValuePE > 0
+            ? +((fairValuePE * 0.5 + fairValueDCF * 0.5).toFixed(2))
+            : +fairValueDCF.toFixed(2);
+        const margin = fairValueConsensus > 0 ? (fairValueConsensus - currentPrice) / fairValueConsensus : 0;
         const recLabel = margin > 0.15 ? 'Buy' : margin > -0.05 ? 'Hold' : 'Sell';
 
-        const marketCap = p.mktCap || q.marketCap || 0;
-        const marketCapStr = marketCap >= 1e12 ? (marketCap / 1e12).toFixed(2) + ' Bio.' :
-                             marketCap >= 1e9 ? (marketCap / 1e9).toFixed(2) + ' Mrd.' :
-                             marketCap >= 1e6 ? (marketCap / 1e6).toFixed(0) + ' Mio.' : '-';
+        // === Marktkapitalisierung (Schaetzung aus Preis * Shares wenn vorhanden) ===
+        const mcRaw = meta.marketCap || 0;
+        const mcStr = mcRaw >= 1e12 ? (mcRaw/1e12).toFixed(2)+' Bio.' :
+                      mcRaw >= 1e9  ? (mcRaw/1e9).toFixed(2)+' Mrd.' :
+                      mcRaw >= 1e6  ? (mcRaw/1e6).toFixed(0)+' Mio.' : '-';
 
-        // Auto-generate reasoning
-        const metricsLike = epsArr.map((_, i) => ({
-            roic: roicArr[i],
-            dividendYield: divYield[i],
-            debtToEquity: equityArr[i] > 0 ? totalDebt[i] / equityArr[i] : 0
-        }));
-        const reasoning = generateReasoning(ticker, p, { pe: q.pe, beta: p.beta }, epsArr, kgvArr, avg10PE, fcfArr, revenue, growth, metricsLike, last, margin);
+        // === Reasoning ===
+        const reasoning = generateReasoning(ticker,
+            { companyName, sector: meta.market || 'Aktie', industry: '', description: '' },
+            { pe: currentPE, beta: meta.beta || 1.0 },
+            epsArr, kgvArr, avg10PE, fcfArr, revenueAligned, growth,
+            years.map((_, i) => ({ roic: roicArr[i] || 0, dividendYield: divYield[i] || 0, debtToEquity: 0 })),
+            lastIdx, margin);
 
-        // Trade setup
-        const stopLoss = +(currentPrice * 0.90).toFixed(2);
-        const target1 = +(currentPrice * 1.12).toFixed(2);
-        const target2 = +Math.max(fairValueConsensus, currentPrice * 1.25).toFixed(2);
-
-        // Map Yahoo news to our format
-        const news = newsResp.news || [];
-        const newsItems = news.slice(0, 8).map(n => ({
+        // === News ===
+        const newsItems = (newsResp.news || []).slice(0, 8).map(n => ({
             title: n.title || 'Kein Titel',
             date: n.providerPublishTime ? new Date(n.providerPublishTime * 1000).toLocaleDateString('de-DE') : '-',
-            source: n.publisher || 'Yahoo Finance',
-            sentiment: 'neutral',
-            body: (n.summary || n.title || '').substring(0, 250),
-            link: n.link || ''
+            source: n.publisher || 'Yahoo Finance', sentiment: 'neutral',
+            body: (n.summary || n.title || '').substring(0, 250), link: n.link || ''
         }));
-        if (newsItems.length === 0) {
-            newsItems.push({
-                title: p.companyName + ' - Live-Daten geladen',
-                date: new Date().toLocaleDateString('de-DE'),
-                source: 'FMP API',
-                sentiment: 'neutral',
-                body: 'Kurs: ' + fmtUSD(currentPrice) + ' | KGV: ' + fmt(q.pe || 0, 1) + ' | ' + (p.description || '').substring(0, 200)
-            });
-        }
+        if (newsItems.length === 0) newsItems.push({
+            title: companyName + ' – Live-Daten geladen', source: 'Yahoo Finance', sentiment: 'neutral',
+            date: new Date().toLocaleDateString('de-DE'),
+            body: 'Kurs: ' + fmtUSD(currentPrice) + ' | KGV: ' + fmt(currentPE, 1)
+        });
+
+        const hasTimeseries = epsArr.some(e => e !== 0);
 
         const stockData = {
-            name: p.companyName, sector: p.sector || 'Unbekannt', currentPrice,
-            marketCap: marketCapStr, pe: +(q.pe || 0).toFixed(2), avg10PE, beta: +(p.beta || 1.0).toFixed(2),
-            years, revenue, eps: epsArr, fcf: fcfArr, bvps, netIncome: netIncomeArr,
-            roic: roicArr, longTermDebt: ltDebt, debtToFCF, interestCoverage: interestCov,
-            dividend, divYield, payoutRatio, buybackYield, kgv: kgvArr,
+            name: companyName, sector: meta.market || 'Aktie', currentPrice,
+            marketCap: mcStr, pe: currentPE, avg10PE, beta: +(meta.beta || 1.0).toFixed(2),
+            years, revenue: revenueAligned, eps: epsArr, fcf: fcfArr, bvps,
+            netIncome: netIncomeArr, roic: roicArr, longTermDebt: ltDebt,
+            debtToFCF: placeholder, interestCoverage: placeholder,
+            dividend, divYield, payoutRatio: placeholder, buybackYield: placeholder, kgv: kgvArr,
             growth, defaultGrowth: Math.round(Math.max(epsGrowth5y, 5)), defaultPE: Math.round(avg10PE),
             analystEstimates: {
-                source: 'Financial Modeling Prep + Yahoo (Live)',
+                source: hasTimeseries ? 'Yahoo Finance (Fundamentals + Chart)' : 'Yahoo Finance (Chart-Daten)',
                 targetPrice: +fairValueConsensus.toFixed(2),
-                targetLow: +(fairValueConsensus * 0.85).toFixed(2),
-                targetHigh: +(fairValueConsensus * 1.15).toFixed(2),
-                epsNext: +epsNext.toFixed(2),
+                targetLow:   +(fairValueConsensus * 0.85).toFixed(2),
+                targetHigh:  +(fairValueConsensus * 1.15).toFixed(2),
+                epsNext:     +(lastEps * 1.08).toFixed(2),
                 epsGrowth5y: +epsGrowth5y.toFixed(1),
                 revenueGrowthNext: growth.revenue5 > 0 ? +growth.revenue5.toFixed(1) : 5.0,
-                recommendation: recLabel,
-                numAnalysts: est.numberAnalystEstimatedRevenue || 1,
+                recommendation: recLabel, numAnalysts: 0,
                 fairValueDCF, fairValuePE, fairValueConsensus,
-                lastUpdated: new Date().toLocaleDateString('de-DE')
+                lastUpdated: new Date().toLocaleDateString('de-DE'),
+                avgRating: meta.averageAnalystRating || ''
             },
-            setup: { entry: currentPrice, stopLoss, target1, target2 },
-            reasoning, news: newsItems,
-            _financialsBlocked: financialsBlocked
+            setup: {
+                entry: currentPrice, stopLoss: +(currentPrice * 0.90).toFixed(2),
+                target1: +(currentPrice * 1.12).toFixed(2),
+                target2: +Math.max(fairValueConsensus, currentPrice * 1.25).toFixed(2)
+            },
+            reasoning, news: newsItems, _hasSummary: hasTimeseries
         };
 
         stockDB[ticker] = stockData;
-        showLoading(false);
         return stockData;
-    } catch (e) {
+    } finally {
         showLoading(false);
-        console.error('API-Fehler fuer ' + ticker + ':', e);
-        throw e;
     }
 }
 
@@ -595,7 +682,7 @@ function showLoading(show) {
 // === HELPERS ===
 function fmt(n, d = 2) { return n != null ? n.toFixed(d) : '-'; }
 function fmtPct(n) { return n != null ? (n * 100).toFixed(1) + '%' : '-'; }
-function fmtUSD(n) { return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtUSD(n) { if (n == null || isNaN(n)) return '$–'; return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function destroyChart(key) { if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; } }
 
 // === NAVIGATION ===
@@ -614,61 +701,27 @@ document.querySelectorAll('.nav-links li').forEach(item => {
 document.getElementById('tickerSearchBtn').addEventListener('click', () => loadTicker());
 document.getElementById('tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadTicker(); });
 
-// === API KEY MODAL ===
-function updateApiKeyButton() {
-    const btn = document.getElementById('apiKeyBtn');
-    if (btn) btn.classList.toggle('has-key', !!getFmpKey());
-}
-document.getElementById('apiKeyBtn').addEventListener('click', () => {
-    document.getElementById('apiKeyInput').value = getFmpKey();
-    document.getElementById('apiKeyModal').style.display = 'flex';
-});
-document.getElementById('apiKeySaveBtn').addEventListener('click', () => {
-    const key = document.getElementById('apiKeyInput').value.trim();
-    setFmpKey(key);
-    updateApiKeyButton();
-    document.getElementById('apiKeyModal').style.display = 'none';
-    alert(key ? 'API-Key gespeichert! Du kannst nun beliebige Ticker laden.' : 'API-Key entfernt.');
-});
-document.getElementById('apiKeyCancelBtn').addEventListener('click', () => {
-    document.getElementById('apiKeyModal').style.display = 'none';
-});
-updateApiKeyButton();
-
 async function loadTicker() {
     const input = document.getElementById('tickerInput').value.trim().toUpperCase();
     if (!input || isLoading) return;
 
-    // Wenn API-Key gesetzt: IMMER frische Daten laden (auch fuer cached Stocks)
-    // Sonst nur Cache verwenden, mit Warnung bei moeglicherweise veralteten Daten
-    const hasKey = !!getFmpKey();
-    if (hasKey) {
-        try {
-            await fetchStockFromAPI(input);
-        } catch (e) {
-            // Wenn Cache vorhanden, fallback - sonst Fehler anzeigen
-            if (!stockDB[input]) {
-                let msg = 'Fehler beim Laden von "' + input + '".';
-                if (e.message.includes('403')) {
-                    msg += '\n\n❌ FMP 403: Dieser Ticker ist im kostenlosen Plan nicht verfuegbar oder das Tageslimit (250 Calls) ist erreicht.\n\n💡 Tipp: Grosse US-Aktien (AAPL, MSFT, GOOGL, TSLA, AMZN usw.) funktionieren am besten. Kleinere Werte koennen einen bezahlten Plan benoetigen.';
-                } else if (e.message.includes('401')) {
-                    msg += '\n\n❌ FMP 401: Ungueltiger API-Key. Bitte Key pruefen.';
-                } else if (e.message.includes('429')) {
-                    msg += '\n\n❌ FMP 429: Tageslimit (250 Calls) erreicht. Bitte morgen erneut versuchen.';
-                } else if (e.message.includes('nicht gefunden')) {
-                    msg += '\n\n❌ Ticker "' + input + '" wurde nicht gefunden. Bitte US-Ticker (z.B. AAPL, MSFT, TSLA) verwenden.';
-                } else {
-                    msg += '\n\nDetails: ' + e.message;
-                }
-                alert(msg);
-                return;
+    try {
+        await fetchStockFromAPI(input);
+    } catch (e) {
+        // Bei Fehler: Cache verwenden wenn vorhanden, sonst Fehlermeldung
+        if (!stockDB[input]) {
+            let msg = '❌ "' + input + '" konnte nicht geladen werden.\n\n';
+            if (e.message.includes('nicht gefunden')) {
+                msg += 'Ticker nicht gefunden. Bitte US-Boersenkuerzel verwenden (z.B. AAPL, MSFT, TSLA, DELL, SAP).';
+            } else if (e.message.includes('429') || e.message.includes('Too Many')) {
+                msg += 'Zu viele Anfragen. Bitte kurz warten und erneut versuchen.';
+            } else {
+                msg += 'Details: ' + e.message;
             }
-            console.warn('API-Fetch fehlgeschlagen, verwende Cache:', e.message);
+            alert(msg);
+            return;
         }
-    } else if (!stockDB[input]) {
-        alert('Um neue Ticker zu laden, brauchst du einen kostenlosen API-Key.\n\nKlicke oben rechts auf das Schluessel-Icon, um einen einzurichten.');
-        document.getElementById('apiKeyModal').style.display = 'flex';
-        return;
+        console.warn('Fetch fehlgeschlagen, verwende Cache:', e.message);
     }
 
     currentTicker = input;
@@ -716,9 +769,10 @@ function renderDashboard(s) {
     // Stale-Data-Warnung wenn Cache verwendet wird ohne API-Key
     renderDataSourceBanner(s);
 
-    const lastEps = s.eps[s.eps.length - 1];
-    const yoyChange = ((s.eps[s.eps.length - 1] / s.eps[s.eps.length - 2]) - 1) * 100;
-    document.getElementById('priceChange').textContent = (yoyChange >= 0 ? '+' : '') + fmt(yoyChange, 1) + '% EPS YoY';
+    const lastEps  = s.eps.length > 0 ? s.eps[s.eps.length - 1] : 0;
+    const prevEps  = s.eps.length > 1 ? s.eps[s.eps.length - 2] : null;
+    const yoyChange = (prevEps && prevEps !== 0) ? ((lastEps / prevEps) - 1) * 100 : 0;
+    document.getElementById('priceChange').textContent = prevEps != null ? (yoyChange >= 0 ? '+' : '') + fmt(yoyChange, 1) + '% EPS YoY' : 'EPS: $' + fmt(lastEps, 2);
     document.getElementById('priceChange').className = 'kpi-change ' + (yoyChange >= 0 ? 'positive' : 'negative');
 
     document.getElementById('marketCap').textContent = '$' + s.marketCap;
@@ -762,18 +816,20 @@ function renderDataSourceBanner(s) {
         const dashboardSection = document.getElementById('dashboard');
         if (dashboardSection) dashboardSection.insertBefore(banner, dashboardSection.firstChild.nextSibling);
     }
-    const src = s.analystEstimates && s.analystEstimates.source ? s.analystEstimates.source : '';
-    const isLive = src.includes('Financial Modeling Prep');
-    const isPartial = isLive && s._financialsBlocked;
-    if (isLive && !isPartial) {
+    const src = (s.analystEstimates && s.analystEstimates.source) ? s.analystEstimates.source : '';
+    const isLive   = src.includes('Yahoo Finance');
+    const isFull   = isLive && s._hasSummary;
+    const rating   = s.analystEstimates.avgRating ? ' | Analysten-Ø: ' + s.analystEstimates.avgRating : '';
+
+    if (isFull) {
         banner.className = 'data-source-banner live';
-        banner.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Live-Daten</strong> - Geladen via FMP API + Yahoo Finance | Stand: ' + s.analystEstimates.lastUpdated;
-    } else if (isPartial) {
+        banner.innerHTML = '<i class="fas fa-check-circle"></i> <strong>Live-Daten (vollständig)</strong> – Yahoo Finance QuoteSummary + Chart | Stand: ' + s.analystEstimates.lastUpdated + rating;
+    } else if (isLive) {
         banner.className = 'data-source-banner partial';
-        banner.innerHTML = '<i class="fas fa-info-circle"></i> <strong>Teilweise Live</strong> - Kurs & Basisdaten von FMP/Yahoo. Historische Fundamentaldaten nicht im Free-Plan enthalten. | Stand: ' + s.analystEstimates.lastUpdated;
+        banner.innerHTML = '<i class="fas fa-info-circle"></i> <strong>Live-Daten (Chart)</strong> – Kurs, EPS & Dividenden aus Yahoo Chart-Events | Stand: ' + s.analystEstimates.lastUpdated + rating;
     } else {
         banner.className = 'data-source-banner cached';
-        banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Demo-Daten (Cache)</strong> - Diese Aktie zeigt vorinstallierte Daten, die veraltet sein koennen. Fuer Live-Daten <a href="#" onclick="document.getElementById(\'apiKeyModal\').style.display=\'flex\';return false">FMP API-Key hinzufuegen</a>.';
+        banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Demo-Daten (Cache)</strong> – Vorinstallierte Daten. Ticker erneut suchen für Live-Daten.';
     }
 }
 
