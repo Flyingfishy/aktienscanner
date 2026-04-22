@@ -341,22 +341,23 @@ let _yahooCrumb = null;
 let _yahooCrumbExpiry = 0;
 
 async function yahooFetch(path, base) {
-    // Versuche query1, bei 403/429 automatisch query2 als Fallback
-    const hosts = base ? [base] : [Y1, Y2];
+    // Reihenfolge: query1 → query2 → query1 (nach 800ms Pause) → query2 (nach 800ms)
+    const hosts = base ? [base, base] : [Y1, Y2, Y1, Y2];
     let lastErr;
-    for (const host of hosts) {
+    for (let i = 0; i < hosts.length; i++) {
         try {
-            const url = CORS_PROXY + encodeURIComponent(host + path);
+            // Ab 3. Versuch kurze Pause einlegen (ueberbrueckt temporaere Rate-Limits)
+            if (i === 2) await new Promise(r => setTimeout(r, 800));
+            const url = CORS_PROXY + encodeURIComponent(hosts[i] + path);
             const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
             if (resp.ok) return resp.json();
             if (resp.status === 403 || resp.status === 429) {
                 lastErr = new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
-                continue; // naechsten Host versuchen
+                continue;
             }
             throw new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
         } catch (e) {
             lastErr = e;
-            if (hosts.indexOf(host) < hosts.length - 1) continue;
         }
     }
     throw lastErr;
