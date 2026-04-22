@@ -333,25 +333,38 @@ let isLoading = false;
 // Yahoo: Live-Kurse + News (kein Key, via CORS Proxy)
 // Financial Modeling Prep: Fundamentaldaten (gratis, eigener Key bei financialmodelingprep.com/developer)
 // === YAHOO FINANCE API (kein Key noetig) ===
-const CORS_PROXY = 'https://corsproxy.io/?';
 const Y1 = 'https://query1.finance.yahoo.com';
 const Y2 = 'https://query2.finance.yahoo.com';
+
+// Proxy-Strategie: corsproxy.io (schnell) → allorigins.win (zuverlaessig als Backup)
+function buildProxyAttempts(path, base) {
+    const hosts = base ? [base] : [Y1, Y2];
+    const attempts = [];
+    // Versuch 1+2: corsproxy.io (query1 + query2)
+    for (const h of hosts) {
+        attempts.push({ url: `https://corsproxy.io/?${encodeURIComponent(h + path)}`, timeout: 7000 });
+    }
+    // Versuch 3+4: allorigins.win als zuverlaessiger Fallback
+    for (const h of hosts) {
+        attempts.push({ url: `https://api.allorigins.win/raw?url=${encodeURIComponent(h + path)}`, timeout: 15000 });
+    }
+    return attempts;
+}
 
 let _yahooCrumb = null;
 let _yahooCrumbExpiry = 0;
 
 async function yahooFetch(path, base) {
-    // Reihenfolge: query1 → query2 → query1 (nach 800ms Pause) → query2 (nach 800ms)
-    const hosts = base ? [base, base] : [Y1, Y2, Y1, Y2];
+    const attempts = buildProxyAttempts(path, base);
     let lastErr;
-    for (let i = 0; i < hosts.length; i++) {
+    for (const attempt of attempts) {
         try {
-            // Ab 3. Versuch kurze Pause einlegen (ueberbrueckt temporaere Rate-Limits)
-            if (i === 2) await new Promise(r => setTimeout(r, 800));
-            const url = CORS_PROXY + encodeURIComponent(hosts[i] + path);
-            const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            const resp = await fetch(attempt.url, {
+                headers: { 'Accept': 'application/json' },
+                signal: AbortSignal.timeout(attempt.timeout)
+            });
             if (resp.ok) return resp.json();
-            if (resp.status === 403 || resp.status === 429) {
+            if (resp.status === 403 || resp.status === 429 || resp.status === 401) {
                 lastErr = new Error(`Yahoo ${resp.status}: ${path.split('?')[0]}`);
                 continue;
             }
